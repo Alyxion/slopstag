@@ -57,11 +57,14 @@ export class GradientTool extends Tool {
             return;
         }
 
-        // Save state for undo
-        this.app.history.saveState('gradient');
+        // Save state for undo - history auto-detects changed region
+        this.app.history.saveState('Gradient');
 
         // Draw final gradient
         this.drawGradient(layer.ctx, this.startX, this.startY, x, y);
+
+        // Finish history capture
+        this.app.history.finishState();
 
         this.isDrawing = false;
         this.app.renderer.clearPreviewLayer();
@@ -133,8 +136,9 @@ export class GradientTool extends Tool {
             if (params.startColor) this.app.foregroundColor = params.startColor;
             if (params.endColor) this.app.backgroundColor = params.endColor;
 
-            this.app.history.saveState('gradient_api');
+            this.app.history.saveState('Gradient');
             this.drawGradient(layer.ctx, x1, y1, x2, y2);
+            this.app.history.finishState();
             this.app.renderer.requestRender();
 
             return { success: true };

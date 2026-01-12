@@ -41,8 +41,8 @@ export class ShapeTool extends Tool {
         this.previewCanvas.width = layer.width;
         this.previewCanvas.height = layer.height;
 
-        // Save state for undo
-        this.app.history.saveState('shape');
+        // Save state for undo - history auto-detects changed region
+        this.app.history.saveState('Shape');
     }
 
     onMouseMove(e, x, y) {
@@ -67,6 +67,8 @@ export class ShapeTool extends Tool {
 
         this.isDrawing = false;
         this.app.renderer.clearPreviewLayer();
+        // Finish history capture
+        this.app.history.finishState();
         this.app.renderer.requestRender();
     }
 
@@ -74,6 +76,8 @@ export class ShapeTool extends Tool {
         if (this.isDrawing) {
             this.isDrawing = false;
             this.app.renderer.clearPreviewLayer();
+            // Abort history capture since shape wasn't drawn
+            this.app.history.abortCapture();
         }
     }
 

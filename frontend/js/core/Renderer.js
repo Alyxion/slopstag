@@ -70,7 +70,10 @@ export class Renderer {
 
             this.compositeCtx.globalAlpha = layer.opacity;
             this.compositeCtx.globalCompositeOperation = BlendModes.toCompositeOperation(layer.blendMode);
-            this.compositeCtx.drawImage(layer.canvas, 0, 0);
+            // Draw layer at its offset position (layers can extend beyond document bounds)
+            const offsetX = layer.offsetX ?? 0;
+            const offsetY = layer.offsetY ?? 0;
+            this.compositeCtx.drawImage(layer.canvas, offsetX, offsetY);
         }
 
         // Draw preview layer if set
@@ -104,6 +107,63 @@ export class Renderer {
             width * this.zoom + 1,
             height * this.zoom + 1
         );
+
+        // Draw bounding boxes for layers that extend outside the main canvas
+        this.drawLayerBoundingBoxes(width, height);
+    }
+
+    /**
+     * Draw bounding boxes for layers that extend outside the document bounds.
+     * Helps users find layers that are positioned off-canvas.
+     * @param {number} docWidth - Document width
+     * @param {number} docHeight - Document height
+     */
+    drawLayerBoundingBoxes(docWidth, docHeight) {
+        const activeLayer = this.layerStack.getActiveLayer();
+        if (!activeLayer) return;
+
+        // Only show for the active layer if it extends outside bounds
+        const offsetX = activeLayer.offsetX ?? 0;
+        const offsetY = activeLayer.offsetY ?? 0;
+        const layerRight = offsetX + activeLayer.width;
+        const layerBottom = offsetY + activeLayer.height;
+
+        // Check if layer extends outside document bounds
+        const extendsOutside = offsetX < 0 || offsetY < 0 ||
+                               layerRight > docWidth || layerBottom > docHeight;
+
+        if (!extendsOutside) return;
+
+        this.displayCtx.save();
+        this.displayCtx.translate(this.panX, this.panY);
+        this.displayCtx.scale(this.zoom, this.zoom);
+
+        // Draw dashed bounding box around layer bounds
+        this.displayCtx.strokeStyle = '#ff6600';
+        this.displayCtx.lineWidth = 2 / this.zoom;
+        this.displayCtx.setLineDash([6 / this.zoom, 4 / this.zoom]);
+        this.displayCtx.strokeRect(offsetX, offsetY, activeLayer.width, activeLayer.height);
+
+        // Draw corner handles
+        this.displayCtx.setLineDash([]);
+        this.displayCtx.fillStyle = '#ff6600';
+        const handleSize = 6 / this.zoom;
+        const corners = [
+            { x: offsetX, y: offsetY },
+            { x: layerRight, y: offsetY },
+            { x: layerRight, y: layerBottom },
+            { x: offsetX, y: layerBottom }
+        ];
+        for (const corner of corners) {
+            this.displayCtx.fillRect(
+                corner.x - handleSize / 2,
+                corner.y - handleSize / 2,
+                handleSize,
+                handleSize
+            );
+        }
+
+        this.displayCtx.restore();
     }
 
     /**

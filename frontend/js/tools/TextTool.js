@@ -126,7 +126,7 @@ export class TextTool extends Tool {
         const layer = this.app.layerStack.getActiveLayer();
         if (!layer || layer.locked) return;
 
-        this.app.history.saveState('text');
+        this.app.history.saveState('Text');
 
         const ctx = layer.ctx;
         ctx.font = `${this.fontStyle} ${this.fontWeight} ${this.fontSize}px ${this.fontFamily}`;
@@ -135,6 +135,9 @@ export class TextTool extends Tool {
         ctx.textBaseline = 'top';
 
         ctx.fillText(text, x, y);
+
+        // Finish history capture
+        this.app.history.finishState();
 
         this.app.renderer.requestRender();
     }

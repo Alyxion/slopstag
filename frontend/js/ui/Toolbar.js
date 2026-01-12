@@ -169,8 +169,9 @@ export class Toolbar {
         } else if (action === 'clear-layer') {
             const layer = this.app.layerStack.getActiveLayer();
             if (layer && !layer.locked) {
-                this.app.history.saveState('clear');
+                this.app.history.saveState('Clear Layer');
                 layer.clear();
+                this.app.history.finishState();
                 this.app.renderer.requestRender();
             }
         } else if (action === 'export-png') {
@@ -190,12 +191,14 @@ export class Toolbar {
         const layer = this.app.layerStack.getActiveLayer();
         if (!layer || layer.locked) return;
 
-        this.app.history.saveState('filter');
+        this.app.history.saveState('Filter');
 
         try {
             await this.app.pluginManager.applyFilter(filterId, layer);
+            this.app.history.finishState();
         } catch (error) {
             console.error('Filter error:', error);
+            this.app.history.abortCapture();
             alert(`Filter error: ${error.message}`);
         }
     }

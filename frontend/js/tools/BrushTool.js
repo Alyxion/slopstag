@@ -2,6 +2,7 @@
  * BrushTool - Freehand painting with configurable brush.
  */
 import { Tool } from './Tool.js';
+import { BrushPresets, DEFAULT_PRESET, getPreset } from '../data/BrushPresets.js';
 
 export class BrushTool extends Tool {
     static id = 'brush';
@@ -14,10 +15,14 @@ export class BrushTool extends Tool {
         super(app);
 
         // Brush properties
-        this.size = 10;
+        this.size = 20;
         this.hardness = 100; // 0-100, affects edge softness
         this.opacity = 100;  // 0-100
         this.flow = 100;     // 0-100, affects buildup
+        this.currentPreset = DEFAULT_PRESET;
+
+        // Apply default preset
+        this.applyPreset(DEFAULT_PRESET);
 
         // State
         this.isDrawing = false;
@@ -28,6 +33,18 @@ export class BrushTool extends Tool {
         this.brushStamp = null;
         this.stampColor = '#000000';
         this.updateBrushStamp();
+    }
+
+    applyPreset(presetId) {
+        const preset = getPreset(presetId);
+        if (preset) {
+            this.size = preset.size;
+            this.hardness = preset.hardness;
+            this.opacity = preset.opacity;
+            this.flow = preset.flow;
+            this.currentPreset = presetId;
+            this.updateBrushStamp();
+        }
     }
 
     updateBrushStamp() {
@@ -72,6 +89,24 @@ export class BrushTool extends Tool {
         const layer = this.app.layerStack.getActiveLayer();
         if (!layer || layer.locked) return;
 
+        // Check if this is a vector layer - offer to rasterize
+        if (layer.isVector && layer.isVector()) {
+            this.app.showRasterizeDialog(layer, (confirmed) => {
+                if (confirmed) {
+                    // Layer has been rasterized, start drawing
+                    this.startDrawing(e, x, y);
+                }
+            });
+            return;
+        }
+
+        this.startDrawing(e, x, y);
+    }
+
+    startDrawing(e, x, y) {
+        const layer = this.app.layerStack.getActiveLayer();
+        if (!layer || layer.locked) return;
+
         // Check if color changed
         if (this.stampColor !== this.app.foregroundColor) {
             this.updateBrushStamp();
@@ -81,8 +116,8 @@ export class BrushTool extends Tool {
         this.lastX = x;
         this.lastY = y;
 
-        // Save state for undo
-        this.app.history.saveState('brush');
+        // Save state for undo - history system auto-detects changed region
+        this.app.history.saveState('Brush Stroke');
 
         // Draw initial stamp
         this.drawStamp(layer, x, y);
@@ -104,17 +139,44 @@ export class BrushTool extends Tool {
     }
 
     onMouseUp(e, x, y) {
-        this.isDrawing = false;
+        if (this.isDrawing) {
+            this.isDrawing = false;
+            // Finish history capture - auto-detects changed pixels
+            this.app.history.finishState();
+        }
     }
 
     onMouseLeave(e) {
-        this.isDrawing = false;
+        if (this.isDrawing) {
+            this.isDrawing = false;
+            // Finish history capture even if mouse leaves
+            this.app.history.finishState();
+        }
     }
 
     drawStamp(layer, x, y) {
-        const offset = this.size / 2;
+        const halfSize = this.size / 2;
+
+        // Expand layer if needed to include the brush area
+        if (layer.expandToInclude) {
+            layer.expandToInclude(
+                x - halfSize,
+                y - halfSize,
+                this.size,
+                this.size
+            );
+        }
+
+        // Convert document coordinates to layer canvas coordinates
+        let canvasX = x, canvasY = y;
+        if (layer.docToCanvas) {
+            const canvasCoords = layer.docToCanvas(x, y);
+            canvasX = canvasCoords.x;
+            canvasY = canvasCoords.y;
+        }
+
         layer.ctx.globalAlpha = (this.opacity / 100) * (this.flow / 100);
-        layer.ctx.drawImage(this.brushStamp, x - offset, y - offset);
+        layer.ctx.drawImage(this.brushStamp, canvasX - halfSize, canvasY - halfSize);
         layer.ctx.globalAlpha = 1.0;
     }
 
@@ -132,13 +194,25 @@ export class BrushTool extends Tool {
     }
 
     onPropertyChanged(id, value) {
-        if (id === 'size' || id === 'hardness') {
+        if (id === 'preset') {
+            this.applyPreset(value);
+        } else if (id === 'size' || id === 'hardness') {
+            this[id] = value;
             this.updateBrushStamp();
+        } else if (id === 'opacity' || id === 'flow') {
+            this[id] = value;
         }
     }
 
     getProperties() {
         return [
+            {
+                id: 'preset',
+                name: 'Preset',
+                type: 'select',
+                options: BrushPresets.map(p => ({ value: p.id, label: p.name })),
+                value: this.currentPreset
+            },
             { id: 'size', name: 'Size', type: 'range', min: 1, max: 200, step: 1, value: this.size },
             { id: 'hardness', name: 'Hardness', type: 'range', min: 0, max: 100, step: 1, value: this.hardness },
             { id: 'opacity', name: 'Opacity', type: 'range', min: 1, max: 100, step: 1, value: this.opacity },
@@ -164,9 +238,11 @@ export class BrushTool extends Tool {
             }
             this.updateBrushStamp();
 
-            this.app.history.saveState('brush_api');
+            // Save state - history auto-detects changed region
+            this.app.history.saveState('Brush Stroke');
 
             const points = params.points;
+
             // Draw first point
             this.drawStamp(layer, points[0][0], points[0][1]);
 
@@ -174,6 +250,9 @@ export class BrushTool extends Tool {
             for (let i = 1; i < points.length; i++) {
                 this.drawLine(layer, points[i-1][0], points[i-1][1], points[i][0], points[i][1]);
             }
+
+            // Finish state - auto-detects changed pixels
+            this.app.history.finishState();
 
             this.app.renderer.requestRender();
             return { success: true };
@@ -186,8 +265,14 @@ export class BrushTool extends Tool {
             }
             this.updateBrushStamp();
 
-            this.app.history.saveState('brush_dot');
+            // Save state - history auto-detects changed region
+            this.app.history.saveState('Brush Dot');
+
             this.drawStamp(layer, params.x, params.y);
+
+            // Finish state - auto-detects changed pixels
+            this.app.history.finishState();
+
             this.app.renderer.requestRender();
             return { success: true };
         }

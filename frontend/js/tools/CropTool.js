@@ -178,7 +178,9 @@ export class CropTool extends Tool {
             return;
         }
 
-        this.app.history.saveState('crop');
+        // Note: Crop is a special case that changes canvas dimensions.
+        // For now we save state for all layers - this will capture full layer data.
+        this.app.history.saveState('Crop');
 
         // Crop all layers
         for (const layerItem of this.app.layerStack.layers) {
@@ -199,6 +201,11 @@ export class CropTool extends Tool {
         this.app.canvasHeight = cropH;
         this.app.renderer.resize(cropW, cropH);
         this.app.renderer.fitToViewport();
+
+        // Note: finishState won't work correctly for crop since canvas size changed.
+        // This is a known limitation - crop requires special structural handling.
+        // For now, we abort the capture since before/after dimensions differ.
+        this.app.history.abortCapture();
 
         this.app.eventBus.emit('canvas:resized', { width: cropW, height: cropH });
 

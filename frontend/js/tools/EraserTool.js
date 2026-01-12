@@ -61,12 +61,30 @@ export class EraserTool extends Tool {
         const layer = this.app.layerStack.getActiveLayer();
         if (!layer || layer.locked) return;
 
+        // Check if this is a vector layer - offer to rasterize
+        if (layer.isVector && layer.isVector()) {
+            this.app.showRasterizeDialog(layer, (confirmed) => {
+                if (confirmed) {
+                    // Layer has been rasterized, start erasing
+                    this.startErasing(e, x, y);
+                }
+            });
+            return;
+        }
+
+        this.startErasing(e, x, y);
+    }
+
+    startErasing(e, x, y) {
+        const layer = this.app.layerStack.getActiveLayer();
+        if (!layer || layer.locked) return;
+
         this.isErasing = true;
         this.lastX = x;
         this.lastY = y;
 
-        // Save state for undo
-        this.app.history.saveState('eraser');
+        // Save state for undo - history system auto-detects changed region
+        this.app.history.saveState('Eraser');
 
         // Erase initial stamp
         this.eraseStamp(layer, x, y);
@@ -87,18 +105,35 @@ export class EraserTool extends Tool {
     }
 
     onMouseUp(e, x, y) {
-        this.isErasing = false;
+        if (this.isErasing) {
+            this.isErasing = false;
+            // Finish history capture - auto-detects changed pixels
+            this.app.history.finishState();
+        }
     }
 
     onMouseLeave(e) {
-        this.isErasing = false;
+        if (this.isErasing) {
+            this.isErasing = false;
+            // Finish history capture even if mouse leaves
+            this.app.history.finishState();
+        }
     }
 
     eraseStamp(layer, x, y) {
-        const offset = this.size / 2;
+        const halfSize = this.size / 2;
+
+        // Convert document coordinates to layer canvas coordinates
+        let canvasX = x, canvasY = y;
+        if (layer.docToCanvas) {
+            const canvasCoords = layer.docToCanvas(x, y);
+            canvasX = canvasCoords.x;
+            canvasY = canvasCoords.y;
+        }
+
         layer.ctx.globalCompositeOperation = 'destination-out';
         layer.ctx.globalAlpha = this.opacity / 100;
-        layer.ctx.drawImage(this.eraserStamp, x - offset, y - offset);
+        layer.ctx.drawImage(this.eraserStamp, canvasX - halfSize, canvasY - halfSize);
         layer.ctx.globalCompositeOperation = 'source-over';
         layer.ctx.globalAlpha = 1.0;
     }
@@ -128,5 +163,41 @@ export class EraserTool extends Tool {
             { id: 'hardness', name: 'Hardness', type: 'range', min: 0, max: 100, step: 1, value: this.hardness },
             { id: 'opacity', name: 'Opacity', type: 'range', min: 1, max: 100, step: 1, value: this.opacity }
         ];
+    }
+
+    // API execution
+    executeAction(action, params) {
+        const layer = this.app.layerStack.getActiveLayer();
+        if (!layer || layer.locked) {
+            return { success: false, error: 'No active layer or layer is locked' };
+        }
+
+        if (action === 'stroke' && params.points && params.points.length >= 1) {
+            if (params.size !== undefined) this.size = params.size;
+            if (params.hardness !== undefined) this.hardness = params.hardness;
+            if (params.opacity !== undefined) this.opacity = params.opacity;
+            this.updateEraserStamp();
+
+            // Save state - history auto-detects changed region
+            this.app.history.saveState('Eraser');
+
+            const points = params.points;
+
+            // Erase first point
+            this.eraseStamp(layer, points[0][0], points[0][1]);
+
+            // Erase lines between consecutive points
+            for (let i = 1; i < points.length; i++) {
+                this.eraseLine(layer, points[i-1][0], points[i-1][1], points[i][0], points[i][1]);
+            }
+
+            // Finish state - auto-detects changed pixels
+            this.app.history.finishState();
+
+            this.app.renderer.requestRender();
+            return { success: true };
+        }
+
+        return { success: false, error: `Unknown action: ${action}` };
     }
 }

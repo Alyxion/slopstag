@@ -19,15 +19,45 @@ export class FillTool extends Tool {
         const layer = this.app.layerStack.getActiveLayer();
         if (!layer || layer.locked) return;
 
+        // Check if this is a vector layer - offer to rasterize
+        if (layer.isVector && layer.isVector()) {
+            this.app.showRasterizeDialog(layer, (confirmed) => {
+                if (confirmed) {
+                    // Layer has been rasterized, do the fill
+                    this.doFill(x, y);
+                }
+            });
+            return;
+        }
+
+        this.doFill(x, y);
+    }
+
+    doFill(x, y) {
+        const layer = this.app.layerStack.getActiveLayer();
+        if (!layer || layer.locked) return;
+
+        // Convert document coordinates to layer canvas coordinates
+        let canvasX = x, canvasY = y;
+        if (layer.docToCanvas) {
+            const canvasCoords = layer.docToCanvas(x, y);
+            canvasX = canvasCoords.x;
+            canvasY = canvasCoords.y;
+        }
+
         // Round coordinates
-        x = Math.floor(x);
-        y = Math.floor(y);
+        canvasX = Math.floor(canvasX);
+        canvasY = Math.floor(canvasY);
 
         // Check bounds
-        if (x < 0 || x >= layer.width || y < 0 || y >= layer.height) return;
+        if (canvasX < 0 || canvasX >= layer.width || canvasY < 0 || canvasY >= layer.height) return;
 
-        // Save state for undo
-        this.app.history.saveState('fill');
+        // Use canvas coordinates for fill
+        x = canvasX;
+        y = canvasY;
+
+        // Save state for undo - history system auto-detects changed region
+        this.app.history.saveState('Fill');
 
         // Get fill color
         const fillColor = this.app.foregroundColor || '#000000';
@@ -35,6 +65,9 @@ export class FillTool extends Tool {
 
         // Perform flood fill
         this.floodFill(layer, x, y, fillRgba);
+
+        // Finish history capture - auto-detects changed pixels
+        this.app.history.finishState();
         this.app.renderer.requestRender();
     }
 

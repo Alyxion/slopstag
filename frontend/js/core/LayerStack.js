@@ -2,6 +2,7 @@
  * LayerStack - Manages multiple layers.
  */
 import { Layer } from './Layer.js';
+import { VectorLayer } from './VectorLayer.js';
 import { BlendModes } from './BlendModes.js';
 
 export class LayerStack {
@@ -19,20 +20,64 @@ export class LayerStack {
     }
 
     /**
-     * Add a new layer.
-     * @param {Object} options - Layer options
-     * @returns {Layer}
+     * Add a new layer or add an existing layer instance.
+     * @param {Object|Layer|VectorLayer} layerOrOptions - Layer instance or options
+     * @returns {Layer|VectorLayer}
      */
-    addLayer(options = {}) {
-        const layer = new Layer({
-            width: this.width,
-            height: this.height,
-            ...options
-        });
+    addLayer(layerOrOptions = {}) {
+        let layer;
+
+        // Check if it's already a Layer instance
+        if (layerOrOptions instanceof Layer) {
+            layer = layerOrOptions;
+        } else {
+            // Create a new Layer from options
+            layer = new Layer({
+                width: this.width,
+                height: this.height,
+                ...layerOrOptions
+            });
+        }
+
         this.layers.push(layer);
         this.activeLayerIndex = this.layers.length - 1;
         this.eventBus.emit('layer:added', { layer, index: this.activeLayerIndex });
         return layer;
+    }
+
+    /**
+     * Set the active layer by ID.
+     * @param {string} id - Layer ID
+     */
+    setActiveLayerById(id) {
+        const index = this.getLayerIndex(id);
+        if (index >= 0) {
+            this.setActiveLayer(index);
+        }
+    }
+
+    /**
+     * Rasterize a vector layer in place.
+     * @param {string} layerId - ID of the vector layer to rasterize
+     * @returns {Layer|null} The new raster layer, or null if layer not found
+     */
+    rasterizeLayer(layerId) {
+        const index = this.getLayerIndex(layerId);
+        if (index < 0) return null;
+
+        const layer = this.layers[index];
+
+        // Only rasterize if it's a vector layer
+        if (!layer.isVector || !layer.isVector()) return layer;
+
+        // Rasterize the vector layer
+        const rasterLayer = layer.rasterize();
+
+        // Replace in the array
+        this.layers[index] = rasterLayer;
+
+        this.eventBus.emit('layer:rasterized', { layerId, index, layer: rasterLayer });
+        return rasterLayer;
     }
 
     /**

@@ -39,12 +39,24 @@ class UnsharpMaskFilter(BaseFilter):
         ]
 
     def apply(self, image: np.ndarray, radius: float = 1.0, amount: float = 1.0) -> np.ndarray:
-        # Process RGB channels, preserve alpha
+        # Separate channels
         rgb = image[:, :, :3].astype(np.float32) / 255.0
-        alpha = image[:, :, 3]
+        alpha = image[:, :, 3:4].astype(np.float32) / 255.0
 
-        sharpened = unsharp_mask(rgb, radius=radius, amount=amount, channel_axis=2)
-        sharpened = np.clip(sharpened * 255, 0, 255).astype(np.uint8)
+        # Pre-multiply RGB by alpha to prevent edge artifacts
+        rgb_premult = rgb * alpha
 
-        result = np.concatenate([sharpened, alpha[:, :, np.newaxis]], axis=2)
+        # Apply unsharp mask to pre-multiplied RGB
+        sharpened_premult = unsharp_mask(rgb_premult, radius=radius, amount=amount, channel_axis=2)
+
+        # Un-premultiply (avoid division by zero)
+        alpha_safe = np.maximum(alpha, 1e-6)
+        rgb_result = sharpened_premult / alpha_safe
+        rgb_result = np.clip(rgb_result, 0, 1)
+
+        # Convert back to uint8
+        rgb_uint8 = (rgb_result * 255).astype(np.uint8)
+        alpha_uint8 = image[:, :, 3:4]  # Preserve original alpha for sharpen
+
+        result = np.concatenate([rgb_uint8, alpha_uint8], axis=2)
         return result

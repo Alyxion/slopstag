@@ -1,5 +1,8 @@
 /**
- * MoveTool - Move layer contents.
+ * MoveTool - Move layer contents by adjusting layer offset.
+ *
+ * Uses offset-based movement so pixels are never lost when
+ * moving layers outside the document bounds.
  */
 import { Tool } from './Tool.js';
 
@@ -7,7 +10,7 @@ export class MoveTool extends Tool {
     static id = 'move';
     static name = 'Move';
     static icon = 'move';
-    static shortcut = 'v';
+    static shortcut = null;  // Removed - 'v' is now used by Select tool
     static cursor = 'move';
 
     constructor(app) {
@@ -17,7 +20,8 @@ export class MoveTool extends Tool {
         this.isMoving = false;
         this.startX = 0;
         this.startY = 0;
-        this.layerSnapshot = null;
+        this.initialOffsetX = 0;
+        this.initialOffsetY = 0;
     }
 
     onMouseDown(e, x, y) {
@@ -28,39 +32,38 @@ export class MoveTool extends Tool {
         this.startX = x;
         this.startY = y;
 
-        // Save layer content for moving
-        this.layerSnapshot = layer.ctx.getImageData(0, 0, layer.width, layer.height);
+        // Save initial layer offset for relative movement
+        this.initialOffsetX = layer.offsetX ?? 0;
+        this.initialOffsetY = layer.offsetY ?? 0;
 
-        // Save state for undo
-        this.app.history.saveState('move');
+        // Use structural change tracking for offset-based movement
+        this.app.history.beginCapture('Move Layer', []);
+        this.app.history.beginStructuralChange();
     }
 
     onMouseMove(e, x, y) {
-        if (!this.isMoving || !this.layerSnapshot) return;
+        if (!this.isMoving) return;
 
         const layer = this.app.layerStack.getActiveLayer();
         if (!layer || layer.locked) return;
 
+        // Calculate total movement from start position
         const dx = Math.round(x - this.startX);
         const dy = Math.round(y - this.startY);
 
-        // Clear layer
-        layer.ctx.clearRect(0, 0, layer.width, layer.height);
+        // Update layer offset (doesn't touch pixel data)
+        layer.offsetX = this.initialOffsetX + dx;
+        layer.offsetY = this.initialOffsetY + dy;
 
-        // Draw snapshot at offset
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = layer.width;
-        tempCanvas.height = layer.height;
-        const tempCtx = tempCanvas.getContext('2d');
-        tempCtx.putImageData(this.layerSnapshot, 0, 0);
-
-        layer.ctx.drawImage(tempCanvas, dx, dy);
         this.app.renderer.requestRender();
     }
 
     onMouseUp(e, x, y) {
-        this.isMoving = false;
-        this.layerSnapshot = null;
+        if (this.isMoving) {
+            this.isMoving = false;
+            // Commit structural change (includes offset changes)
+            this.app.history.commitCapture();
+        }
     }
 
     onMouseLeave(e) {
@@ -69,5 +72,39 @@ export class MoveTool extends Tool {
 
     getProperties() {
         return [];
+    }
+
+    // API execution
+    executeAction(action, params) {
+        const layer = this.app.layerStack.getActiveLayer();
+        if (!layer || layer.locked) {
+            return { success: false, error: 'No active layer or layer is locked' };
+        }
+
+        if (action === 'move' && params.dx !== undefined && params.dy !== undefined) {
+            this.app.history.beginCapture('Move Layer', []);
+            this.app.history.beginStructuralChange();
+
+            layer.offsetX = (layer.offsetX ?? 0) + params.dx;
+            layer.offsetY = (layer.offsetY ?? 0) + params.dy;
+
+            this.app.history.commitCapture();
+            this.app.renderer.requestRender();
+            return { success: true };
+        }
+
+        if (action === 'set_position' && params.x !== undefined && params.y !== undefined) {
+            this.app.history.beginCapture('Move Layer', []);
+            this.app.history.beginStructuralChange();
+
+            layer.offsetX = params.x;
+            layer.offsetY = params.y;
+
+            this.app.history.commitCapture();
+            this.app.renderer.requestRender();
+            return { success: true };
+        }
+
+        return { success: false, error: `Unknown action: ${action}. Use 'move' with dx/dy or 'set_position' with x/y.` };
     }
 }

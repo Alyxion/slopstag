@@ -33,8 +33,8 @@ export class SprayTool extends Tool {
         this.currentX = x;
         this.currentY = y;
 
-        // Save state for undo
-        this.app.history.saveState('spray');
+        // Save state for undo - history auto-detects changed region
+        this.app.history.saveState('Spray');
 
         // Start spraying
         this.spray(layer, x, y);
@@ -48,12 +48,20 @@ export class SprayTool extends Tool {
 
     onMouseUp(e, x, y) {
         this.stopSprayLoop();
-        this.isSpraying = false;
+        if (this.isSpraying) {
+            this.isSpraying = false;
+            // Finish history capture
+            this.app.history.finishState();
+        }
     }
 
     onMouseLeave(e) {
         this.stopSprayLoop();
-        this.isSpraying = false;
+        if (this.isSpraying) {
+            this.isSpraying = false;
+            // Finish history capture
+            this.app.history.finishState();
+        }
     }
 
     deactivate() {
@@ -129,12 +137,13 @@ export class SprayTool extends Tool {
             const y = params.y !== undefined ? params.y : 0;
             const count = params.count || 1; // Number of spray bursts
 
-            this.app.history.saveState('spray_api');
+            this.app.history.saveState('Spray');
 
             for (let i = 0; i < count; i++) {
                 this.spray(layer, x, y);
             }
 
+            this.app.history.finishState();
             this.app.renderer.requestRender();
             return { success: true };
         }
@@ -144,12 +153,13 @@ export class SprayTool extends Tool {
             if (params.density !== undefined) this.density = params.density;
             if (params.color) this.app.foregroundColor = params.color;
 
-            this.app.history.saveState('spray_stroke');
+            this.app.history.saveState('Spray Stroke');
 
             for (const point of params.points) {
                 this.spray(layer, point[0], point[1]);
             }
 
+            this.app.history.finishState();
             this.app.renderer.requestRender();
             return { success: true };
         }

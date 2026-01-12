@@ -116,22 +116,28 @@ export class LayerPanel {
         });
 
         document.getElementById('layer-delete')?.addEventListener('click', () => {
-            this.app.history.saveState('delete layer');
+            // Note: Layer deletion is a structural change, not pixel-based
+            this.app.history.saveState('Delete Layer');
             this.app.layerStack.removeLayer(this.app.layerStack.activeLayerIndex);
+            this.app.history.finishState();
             this.renderLayerList();
             this.app.renderer.requestRender();
         });
 
         document.getElementById('layer-duplicate')?.addEventListener('click', () => {
-            this.app.history.saveState('duplicate layer');
+            // Note: Layer duplication is a structural change, not pixel-based
+            this.app.history.saveState('Duplicate Layer');
             this.app.layerStack.duplicateLayer(this.app.layerStack.activeLayerIndex);
+            this.app.history.finishState();
             this.renderLayerList();
             this.app.renderer.requestRender();
         });
 
         document.getElementById('layer-merge')?.addEventListener('click', () => {
-            this.app.history.saveState('merge layer');
+            // Merge modifies the bottom layer's pixels
+            this.app.history.saveState('Merge Layers');
             this.app.layerStack.mergeDown(this.app.layerStack.activeLayerIndex);
+            this.app.history.finishState();
             this.renderLayerList();
             this.app.renderer.requestRender();
         });

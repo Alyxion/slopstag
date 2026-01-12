@@ -167,13 +167,13 @@ export class MagicWandTool extends Tool {
     getProperties() {
         return [
             { id: 'tolerance', name: 'Tolerance', type: 'range', min: 0, max: 255, step: 1, value: this.tolerance },
-            { id: 'contiguous', name: 'Contiguous', type: 'select', options: ['true', 'false'], value: String(this.contiguous) }
+            { id: 'contiguous', name: 'Contiguous', type: 'checkbox', value: this.contiguous }
         ];
     }
 
     onPropertyChanged(id, value) {
         if (id === 'contiguous') {
-            this.contiguous = value === 'true';
+            this.contiguous = value;
         }
     }
 

@@ -57,7 +57,7 @@ export class Clipboard {
         const layer = this.app.layerStack.getActiveLayer();
         if (!layer) return false;
 
-        this.app.history.saveState('cut');
+        this.app.history.saveState('Cut');
 
         if (selection && selection.width > 0 && selection.height > 0) {
             // Clear selection area
@@ -72,6 +72,7 @@ export class Clipboard {
             layer.ctx.clearRect(0, 0, layer.width, layer.height);
         }
 
+        this.app.history.finishState();
         this.app.renderer.requestRender();
         this.app.eventBus.emit('clipboard:cut', { width: this.buffer.width, height: this.buffer.height });
         return true;
@@ -87,7 +88,7 @@ export class Clipboard {
 
         const { x = 0, y = 0, asNewLayer = true } = options;
 
-        this.app.history.saveState('paste');
+        this.app.history.saveState('Paste');
 
         let targetLayer;
         if (asNewLayer) {
@@ -108,6 +109,7 @@ export class Clipboard {
         // Draw to target layer at position
         targetLayer.ctx.drawImage(tempCanvas, x, y);
 
+        this.app.history.finishState();
         this.app.renderer.requestRender();
         this.app.eventBus.emit('clipboard:paste', {
             x, y,

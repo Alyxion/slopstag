@@ -8,6 +8,44 @@ from .base import BaseFilter
 from .registry import register_filter
 
 
+def apply_blur_alpha_aware(image: np.ndarray, blur_func, **kwargs) -> np.ndarray:
+    """
+    Apply blur filter with proper alpha handling.
+    Uses pre-multiplied alpha to prevent black edges on transparent areas.
+
+    Args:
+        image: RGBA image as uint8 array
+        blur_func: Function that takes a float32 array and returns blurred result
+        **kwargs: Additional arguments passed to blur_func
+
+    Returns:
+        Blurred RGBA image as uint8 array
+    """
+    # Separate channels and convert to float
+    rgb = image[:, :, :3].astype(np.float32) / 255.0
+    alpha = image[:, :, 3:4].astype(np.float32) / 255.0
+
+    # Pre-multiply RGB by alpha
+    rgb_premult = rgb * alpha
+
+    # Apply blur to pre-multiplied RGB and alpha separately
+    rgb_blurred = blur_func(rgb_premult, **kwargs)
+    alpha_blurred = blur_func(alpha, **kwargs)
+
+    # Un-premultiply (avoid division by zero)
+    alpha_safe = np.maximum(alpha_blurred, 1e-6)
+    rgb_result = rgb_blurred / alpha_safe
+    rgb_result = np.clip(rgb_result, 0, 1)
+
+    # Convert back to uint8
+    rgb_uint8 = (rgb_result * 255).astype(np.uint8)
+    alpha_uint8 = (np.clip(alpha_blurred, 0, 1) * 255).astype(np.uint8)
+
+    # Recombine
+    result = np.concatenate([rgb_uint8, alpha_uint8], axis=2)
+    return result
+
+
 @register_filter("gaussian_blur")
 class GaussianBlurFilter(BaseFilter):
     """Gaussian blur filter."""
@@ -31,15 +69,17 @@ class GaussianBlurFilter(BaseFilter):
         ]
 
     def apply(self, image: np.ndarray, sigma: float = 3.0) -> np.ndarray:
-        # Process RGB channels, preserve alpha
-        rgb = image[:, :, :3].astype(np.float32) / 255.0
-        alpha = image[:, :, 3]
+        def gaussian_blur(arr, sigma):
+            # Handle both RGB (H,W,3) and alpha (H,W,1) arrays
+            if arr.ndim == 3 and arr.shape[2] > 1:
+                return gaussian(arr, sigma=sigma, channel_axis=2)
+            else:
+                # For single channel, squeeze and unsqueeze
+                squeezed = arr.squeeze()
+                blurred = gaussian(squeezed, sigma=sigma)
+                return blurred[:, :, np.newaxis]
 
-        blurred_rgb = gaussian(rgb, sigma=sigma, channel_axis=2)
-        blurred_rgb = (blurred_rgb * 255).astype(np.uint8)
-
-        result = np.concatenate([blurred_rgb, alpha[:, :, np.newaxis]], axis=2)
-        return result
+        return apply_blur_alpha_aware(image, gaussian_blur, sigma=sigma)
 
 
 @register_filter("box_blur")
@@ -65,10 +105,16 @@ class BoxBlurFilter(BaseFilter):
         ]
 
     def apply(self, image: np.ndarray, size: int = 5) -> np.ndarray:
-        result = image.copy()
-        for c in range(3):  # RGB only
-            result[:, :, c] = ndimage.uniform_filter(image[:, :, c], size=size)
-        return result
+        def box_blur(arr, size):
+            if arr.ndim == 3:
+                result = np.zeros_like(arr)
+                for c in range(arr.shape[2]):
+                    result[:, :, c] = ndimage.uniform_filter(arr[:, :, c], size=size, mode='constant', cval=0)
+                return result
+            else:
+                return ndimage.uniform_filter(arr, size=size, mode='constant', cval=0)
+
+        return apply_blur_alpha_aware(image, box_blur, size=size)
 
 
 @register_filter("median_blur")
@@ -96,10 +142,17 @@ class MedianBlurFilter(BaseFilter):
     def apply(self, image: np.ndarray, size: int = 3) -> np.ndarray:
         # Ensure odd kernel size
         size = size if size % 2 == 1 else size + 1
-        result = image.copy()
-        for c in range(3):  # RGB only
-            result[:, :, c] = ndimage.median_filter(image[:, :, c], size=size)
-        return result
+
+        def median_blur(arr, size):
+            if arr.ndim == 3:
+                result = np.zeros_like(arr)
+                for c in range(arr.shape[2]):
+                    result[:, :, c] = ndimage.median_filter(arr[:, :, c], size=size, mode='constant', cval=0)
+                return result
+            else:
+                return ndimage.median_filter(arr, size=size, mode='constant', cval=0)
+
+        return apply_blur_alpha_aware(image, median_blur, size=size)
 
 
 @register_filter("bilateral_blur")
@@ -136,14 +189,31 @@ class BilateralBlurFilter(BaseFilter):
     def apply(self, image: np.ndarray, sigma_color: int = 75, sigma_spatial: int = 10) -> np.ndarray:
         import cv2
 
-        # OpenCV uses BGR, so convert
-        rgb = image[:, :, :3]
-        alpha = image[:, :, 3]
+        # Separate channels
+        rgb = image[:, :, :3].astype(np.float32) / 255.0
+        alpha = image[:, :, 3:4].astype(np.float32) / 255.0
 
-        # Apply bilateral filter
-        filtered = cv2.bilateralFilter(rgb, d=-1, sigmaColor=sigma_color, sigmaSpace=sigma_spatial)
+        # Pre-multiply RGB by alpha
+        rgb_premult = (rgb * alpha * 255).astype(np.uint8)
 
-        result = np.concatenate([filtered, alpha[:, :, np.newaxis]], axis=2)
+        # Apply bilateral filter to pre-multiplied RGB
+        filtered_premult = cv2.bilateralFilter(rgb_premult, d=-1, sigmaColor=sigma_color, sigmaSpace=sigma_spatial)
+
+        # Also blur alpha for consistency
+        alpha_uint8 = (alpha * 255).astype(np.uint8)
+        alpha_blurred = cv2.bilateralFilter(alpha_uint8, d=-1, sigmaColor=sigma_color, sigmaSpace=sigma_spatial)
+
+        # Un-premultiply
+        filtered_float = filtered_premult.astype(np.float32) / 255.0
+        alpha_float = alpha_blurred.astype(np.float32) / 255.0
+        alpha_safe = np.maximum(alpha_float, 1e-6)
+        rgb_result = filtered_float / alpha_safe[:, :, np.newaxis]
+        rgb_result = np.clip(rgb_result, 0, 1)
+
+        # Convert back to uint8
+        rgb_uint8 = (rgb_result * 255).astype(np.uint8)
+
+        result = np.concatenate([rgb_uint8, alpha_blurred], axis=2)
         return result
 
 
@@ -192,10 +262,29 @@ class MotionBlurFilter(BaseFilter):
         kernel = cv2.warpAffine(kernel, rotation_matrix, (size, size))
         kernel = kernel / kernel.sum()  # Normalize
 
-        rgb = image[:, :, :3]
-        alpha = image[:, :, 3]
+        # Separate channels
+        rgb = image[:, :, :3].astype(np.float32) / 255.0
+        alpha = image[:, :, 3:4].astype(np.float32) / 255.0
 
-        filtered = cv2.filter2D(rgb, -1, kernel)
+        # Pre-multiply RGB by alpha
+        rgb_premult = (rgb * alpha * 255).astype(np.uint8)
 
-        result = np.concatenate([filtered, alpha[:, :, np.newaxis]], axis=2)
+        # Apply motion blur to pre-multiplied RGB
+        filtered_premult = cv2.filter2D(rgb_premult, -1, kernel)
+
+        # Also blur alpha
+        alpha_uint8 = (alpha * 255).astype(np.uint8)
+        alpha_blurred = cv2.filter2D(alpha_uint8, -1, kernel)
+
+        # Un-premultiply
+        filtered_float = filtered_premult.astype(np.float32) / 255.0
+        alpha_float = alpha_blurred.astype(np.float32) / 255.0
+        alpha_safe = np.maximum(alpha_float, 1e-6)
+        rgb_result = filtered_float / alpha_safe
+        rgb_result = np.clip(rgb_result, 0, 1)
+
+        # Convert back to uint8
+        rgb_uint8 = (rgb_result * 255).astype(np.uint8)
+
+        result = np.concatenate([rgb_uint8, alpha_blurred], axis=2)
         return result

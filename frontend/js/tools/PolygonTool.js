@@ -1,14 +1,19 @@
 /**
  * PolygonTool - Draw multi-point polygons.
  * Click to add points, double-click or press Enter to close.
+ *
+ * By default creates vector shapes on vector layers.
+ * Hold Alt to force raster mode on the current layer.
  */
 import { Tool } from './Tool.js';
+import { VectorLayer } from '../core/VectorLayer.js';
+import { PolygonShape } from '../core/shapes/PolygonShape.js';
 
 export class PolygonTool extends Tool {
     static id = 'polygon';
     static name = 'Polygon';
     static icon = 'polygon';
-    static shortcut = 'p';
+    static shortcut = null;  // Part of shapes group, no direct shortcut
     static cursor = 'crosshair';
 
     constructor(app) {
@@ -18,14 +23,39 @@ export class PolygonTool extends Tool {
         this.fill = true;
         this.stroke = true;
         this.strokeWidth = 2;
+        this.fillColor = null;   // null = use app.foregroundColor
+        this.strokeColor = null; // null = use app.backgroundColor
+        this.vectorMode = true;  // Create vector shapes by default
 
         // State
         this.points = [];
         this.isDrawing = false;
+        this.forceRaster = false;
 
         // Preview canvas
         this.previewCanvas = document.createElement('canvas');
         this.previewCtx = this.previewCanvas.getContext('2d');
+    }
+
+    /**
+     * Get or create a vector layer for the shape.
+     */
+    getOrCreateVectorLayer() {
+        let layer = this.app.layerStack.getActiveLayer();
+
+        // If not a vector layer, create one
+        if (!layer || !layer.isVector || !layer.isVector()) {
+            layer = new VectorLayer({
+                width: this.app.width,
+                height: this.app.height,
+                name: 'Shape Layer'
+            });
+            this.app.layerStack.addLayer(layer);
+            this.app.layerStack.setActiveLayerById(layer.id);
+            this.app.eventBus.emit('layers:changed');
+        }
+
+        return layer;
     }
 
     onMouseDown(e, x, y) {
@@ -34,6 +64,8 @@ export class PolygonTool extends Tool {
 
         // Set up preview canvas on first point
         if (!this.isDrawing) {
+            // Alt key forces raster mode (only on first click)
+            this.forceRaster = e.altKey;
             this.previewCanvas.width = layer.width;
             this.previewCanvas.height = layer.height;
             this.points = [];
@@ -79,8 +111,8 @@ export class PolygonTool extends Tool {
 
         if (this.points.length === 0) return;
 
-        const fgColor = this.app.foregroundColor || '#000000';
-        const bgColor = this.app.backgroundColor || '#FFFFFF';
+        const fgColor = this.fillColor || this.app.foregroundColor || '#000000';
+        const bgColor = this.strokeColor || this.app.backgroundColor || '#FFFFFF';
 
         this.previewCtx.beginPath();
         this.previewCtx.moveTo(this.points[0][0], this.points[0][1]);
@@ -128,17 +160,59 @@ export class PolygonTool extends Tool {
             return;
         }
 
+        // Use vector mode unless Alt was held or vectorMode is disabled
+        const useVector = this.vectorMode && !this.forceRaster;
+
+        if (useVector) {
+            this.createVectorShape();
+        } else {
+            this.commitRasterPolygon();
+        }
+    }
+
+    createVectorShape() {
+        const layer = this.getOrCreateVectorLayer();
+        if (layer.locked) {
+            this.cleanup();
+            return;
+        }
+
+        this.app.history.saveState('Polygon');
+
+        const shape = new PolygonShape({
+            points: this.points.map(pt => [...pt]),  // Deep copy
+            fillColor: this.fillColor || this.app.foregroundColor || '#000000',
+            strokeColor: this.strokeColor || this.app.backgroundColor || '#FFFFFF',
+            fill: this.fill,
+            stroke: this.stroke,
+            strokeWidth: this.strokeWidth,
+            closed: true
+        });
+
+        layer.addShape(shape);
+        layer.selectShape(shape.id);
+
+        this.app.history.finishState();
+
+        this.cleanup();
+        this.app.renderer.requestRender();
+
+        // Auto-switch to vector-edit tool
+        this.app.toolManager.select('select');
+    }
+
+    commitRasterPolygon() {
         const layer = this.app.layerStack.getActiveLayer();
         if (!layer || layer.locked) {
             this.cancelPolygon();
             return;
         }
 
-        this.app.history.saveState('polygon');
+        this.app.history.saveState('Polygon');
 
         const ctx = layer.ctx;
-        const fgColor = this.app.foregroundColor || '#000000';
-        const bgColor = this.app.backgroundColor || '#FFFFFF';
+        const fgColor = this.fillColor || this.app.foregroundColor || '#000000';
+        const bgColor = this.strokeColor || this.app.backgroundColor || '#FFFFFF';
 
         ctx.beginPath();
         ctx.moveTo(this.points[0][0], this.points[0][1]);
@@ -158,6 +232,9 @@ export class PolygonTool extends Tool {
             ctx.stroke();
         }
 
+        // Finish history capture
+        this.app.history.finishState();
+
         this.cleanup();
         this.app.renderer.requestRender();
     }
@@ -169,6 +246,7 @@ export class PolygonTool extends Tool {
     cleanup() {
         this.points = [];
         this.isDrawing = false;
+        this.forceRaster = false;
         this.app.renderer.clearPreviewLayer();
     }
 
@@ -181,15 +259,23 @@ export class PolygonTool extends Tool {
 
     getProperties() {
         return [
-            { id: 'fill', name: 'Fill', type: 'select', options: ['true', 'false'], value: String(this.fill) },
-            { id: 'stroke', name: 'Stroke', type: 'select', options: ['true', 'false'], value: String(this.stroke) },
-            { id: 'strokeWidth', name: 'Stroke Width', type: 'range', min: 1, max: 50, step: 1, value: this.strokeWidth }
+            { id: 'fill', name: 'Fill', type: 'checkbox', value: this.fill },
+            { id: 'fillColor', name: 'Fill Color', type: 'color', value: this.fillColor || this.app.foregroundColor },
+            { id: 'stroke', name: 'Stroke', type: 'checkbox', value: this.stroke },
+            { id: 'strokeColor', name: 'Stroke Color', type: 'color', value: this.strokeColor || this.app.backgroundColor },
+            { id: 'strokeWidth', name: 'Width', type: 'range', min: 1, max: 50, step: 1, value: this.strokeWidth }
         ];
     }
 
     onPropertyChanged(id, value) {
         if (id === 'fill' || id === 'stroke') {
-            this[id] = value === 'true';
+            this[id] = value;
+        } else if (id === 'fillColor') {
+            this.fillColor = value;
+        } else if (id === 'strokeColor') {
+            this.strokeColor = value;
+        } else if (id === 'strokeWidth') {
+            this.strokeWidth = value;
         }
     }
 
@@ -204,15 +290,12 @@ export class PolygonTool extends Tool {
             if (params.fill !== undefined) this.fill = params.fill;
             if (params.stroke !== undefined) this.stroke = params.stroke;
             if (params.strokeWidth !== undefined) this.strokeWidth = params.strokeWidth;
-            if (params.fillColor) this.app.foregroundColor = params.fillColor;
-            if (params.strokeColor) this.app.backgroundColor = params.strokeColor;
-            if (params.color) this.app.foregroundColor = params.color;
 
-            this.app.history.saveState('polygon_api');
+            this.app.history.saveState('Polygon');
 
             const ctx = layer.ctx;
-            const fgColor = this.app.foregroundColor || '#000000';
-            const bgColor = this.app.backgroundColor || '#FFFFFF';
+            const fgColor = params.fillColor || params.color || this.fillColor || this.app.foregroundColor || '#000000';
+            const bgColor = params.strokeColor || this.strokeColor || this.app.backgroundColor || '#FFFFFF';
 
             ctx.beginPath();
             ctx.moveTo(params.points[0][0], params.points[0][1]);
@@ -232,6 +315,7 @@ export class PolygonTool extends Tool {
                 ctx.stroke();
             }
 
+            this.app.history.finishState();
             this.app.renderer.requestRender();
             return { success: true };
         }
