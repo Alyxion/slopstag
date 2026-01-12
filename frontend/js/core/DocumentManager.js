@@ -74,7 +74,7 @@ export class DocumentManager {
 
         // Activate by default
         if (options.activate !== false) {
-            this.setActiveDocument(doc.id);
+            this.setActiveDocument(doc.id, { isNewDocument: true });
         }
 
         this.app.eventBus?.emit('document:created', { document: doc });
@@ -134,8 +134,10 @@ export class DocumentManager {
     /**
      * Set the active document.
      * @param {string} documentId
+     * @param {Object} [options]
+     * @param {boolean} [options.isNewDocument=false] - Whether this is a newly created document
      */
-    setActiveDocument(documentId) {
+    setActiveDocument(documentId, options = {}) {
         const doc = this.getDocumentById(documentId);
         if (!doc) {
             console.warn(`Document ${documentId} not found`);
@@ -155,7 +157,7 @@ export class DocumentManager {
         this.activeDocumentId = documentId;
 
         // Update app context to point to new document
-        this.updateAppContext(doc);
+        this.updateAppContext(doc, options.isNewDocument || false);
 
         this.app.eventBus?.emit('document:activated', {
             document: doc,
@@ -167,8 +169,9 @@ export class DocumentManager {
     /**
      * Update the app context to use the active document.
      * @param {Document} doc
+     * @param {boolean} isNewDocument - Whether this is a newly created document
      */
-    updateAppContext(doc) {
+    updateAppContext(doc, isNewDocument = false) {
         if (!this.app) return;
 
         // Update app references
@@ -179,13 +182,28 @@ export class DocumentManager {
         this.app.foregroundColor = doc.foregroundColor;
         this.app.backgroundColor = doc.backgroundColor;
 
+        // Update history's app reference so it can access renderer
+        if (doc.history) {
+            doc.history.app = this.app;
+        }
+
         // Update renderer
         if (this.app.renderer) {
             this.app.renderer.layerStack = doc.layerStack;
             this.app.renderer.resize(doc.width, doc.height);
-            this.app.renderer.zoom = doc.zoom;
-            this.app.renderer.panX = doc.panX;
-            this.app.renderer.panY = doc.panY;
+
+            // For new documents, fit to viewport; otherwise restore saved view state
+            if (isNewDocument || (doc.zoom === 1.0 && doc.panX === 0 && doc.panY === 0)) {
+                this.app.renderer.fitToViewport();
+                // Save the fitted view state back to document
+                doc.zoom = this.app.renderer.zoom;
+                doc.panX = this.app.renderer.panX;
+                doc.panY = this.app.renderer.panY;
+            } else {
+                this.app.renderer.zoom = doc.zoom;
+                this.app.renderer.panX = doc.panX;
+                this.app.renderer.panY = doc.panY;
+            }
             this.app.renderer.requestRender();
         }
     }

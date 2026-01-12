@@ -55,12 +55,17 @@ export default {
             <div class="ribbon-bar" v-show="showRibbon">
                 <div class="ribbon-tool-name">{{ currentToolName }}</div>
 
-                <!-- Color controls in ribbon -->
-                <div class="ribbon-colors">
-                    <div class="ribbon-color-swatch" :style="{ backgroundColor: fgColor }" @click="openColorPicker('fg', $event)" title="Foreground color"></div>
-                    <div class="ribbon-color-swatch bg" :style="{ backgroundColor: bgColor }" @click="openColorPicker('bg', $event)" title="Background color"></div>
-                    <button class="ribbon-color-btn" @click="swapColors" title="Swap (X)">&#8646;</button>
-                    <button class="ribbon-color-btn" @click="resetColors" title="Reset (D)">&#8634;</button>
+                <!-- Color controls in ribbon (GIMP/Photoshop style) -->
+                <div class="color-swatches-container">
+                    <div class="color-swatches" @click="swapColors" title="Click to swap (X)">
+                        <div class="color-swatch bg" :style="{ backgroundColor: bgColor }" @click.stop="openColorPicker('bg', $event)" title="Background color (click to edit)"></div>
+                        <div class="color-swatch fg" :style="{ backgroundColor: fgColor }" @click.stop="openColorPicker('fg', $event)" title="Foreground color (click to edit)"></div>
+                        <div class="color-swap-icon" title="Swap colors (X)">&#8633;</div>
+                    </div>
+                    <button class="color-reset-btn" @click="resetColors" title="Reset to black/white (D)">
+                        <span class="reset-swatch black"></span>
+                        <span class="reset-swatch white"></span>
+                    </button>
                 </div>
 
                 <div class="ribbon-separator"></div>
@@ -226,10 +231,30 @@ export default {
                                     @click.stop="toggleLayerVisibility(layer.id)"
                                     v-html="layer.visible ? '&#128065;' : '&#128064;'">
                                 </button>
-                                <span class="layer-type-icon" v-if="layer.isVector" title="Vector Layer">&#9674;</span>
-                                <span class="layer-type-icon raster" v-else title="Pixel Layer">&#9632;</span>
-                                <span class="layer-name">{{ layer.name }}</span>
-                                <span v-if="layer.locked" class="layer-locked" v-html="'&#128274;'"></span>
+                                <div class="layer-thumbnails">
+                                    <canvas
+                                        class="layer-thumbnail"
+                                        :ref="'layerThumb_' + layer.id"
+                                        width="40"
+                                        height="40"
+                                        :title="layer.name">
+                                    </canvas>
+                                    <canvas
+                                        class="layer-thumbnail alpha"
+                                        width="40"
+                                        height="40"
+                                        style="display: none;"
+                                        title="Alpha channel">
+                                    </canvas>
+                                </div>
+                                <div class="layer-info">
+                                    <span class="layer-name">{{ layer.name }}</span>
+                                    <span class="layer-meta">
+                                        <span class="layer-type-icon" v-if="layer.isVector" title="Vector Layer">&#9674;</span>
+                                        <span class="layer-type-icon raster" v-else title="Pixel Layer">&#9632;</span>
+                                        <span v-if="layer.locked" class="layer-locked" v-html="'&#128274;'"></span>
+                                    </span>
+                                </div>
                             </div>
                         </div>
                         <div class="layer-buttons">
@@ -859,6 +884,9 @@ export default {
                 this.currentToolId = data.tool?.constructor.id || '';
                 this.currentToolName = data.tool?.constructor.name || '';
                 this.updateToolProperties();
+                // Only show layer bounds in move tool
+                app.renderer.showLayerBounds = (this.currentToolId === 'move');
+                app.renderer.requestRender();
             });
 
             eventBus.on('layer:added', () => {
@@ -1516,6 +1544,50 @@ export default {
             }));
             this.activeLayerId = app.layerStack.getActiveLayer()?.id;
             this.updateLayerControls();
+            // Update thumbnails after Vue has updated the DOM
+            this.$nextTick(() => this.updateLayerThumbnails());
+        },
+
+        updateLayerThumbnails() {
+            const app = this.getState();
+            if (!app?.layerStack) return;
+
+            const thumbSize = 40;
+
+            for (const layer of app.layerStack.layers) {
+                const refKey = 'layerThumb_' + layer.id;
+                const thumbCanvas = this.$refs[refKey];
+                if (!thumbCanvas || !thumbCanvas[0]) continue;
+
+                const canvas = thumbCanvas[0];
+                const ctx = canvas.getContext('2d');
+
+                // Draw transparency grid background
+                const gridSize = 5;
+                for (let y = 0; y < thumbSize; y += gridSize) {
+                    for (let x = 0; x < thumbSize; x += gridSize) {
+                        const isLight = ((x / gridSize) + (y / gridSize)) % 2 === 0;
+                        ctx.fillStyle = isLight ? '#ffffff' : '#cccccc';
+                        ctx.fillRect(x, y, gridSize, gridSize);
+                    }
+                }
+
+                // Calculate scaling to fit layer in thumbnail
+                const layerWidth = layer.width || layer.canvas?.width || thumbSize;
+                const layerHeight = layer.height || layer.canvas?.height || thumbSize;
+                const scale = Math.min(thumbSize / layerWidth, thumbSize / layerHeight);
+                const scaledWidth = layerWidth * scale;
+                const scaledHeight = layerHeight * scale;
+                const offsetX = (thumbSize - scaledWidth) / 2;
+                const offsetY = (thumbSize - scaledHeight) / 2;
+
+                // Draw layer content
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                if (layer.canvas) {
+                    ctx.drawImage(layer.canvas, offsetX, offsetY, scaledWidth, scaledHeight);
+                }
+            }
         },
 
         updateLayerControls() {
@@ -2156,7 +2228,19 @@ export default {
             }
 
             const tool = app.toolManager.currentTool;
-            tool?.onMouseDown(e, x, y);
+            if (!tool) return;
+
+            // Allow certain tools to work outside canvas bounds
+            const allowOutsideBounds = ['move', 'hand', 'selection', 'lasso', 'crop'].includes(tool.constructor.id);
+
+            // Check if point is within canvas bounds for painting tools
+            if (!allowOutsideBounds) {
+                if (x < 0 || x >= app.width || y < 0 || y >= app.height) {
+                    return; // Don't start painting outside canvas
+                }
+            }
+
+            tool.onMouseDown(e, x, y);
         },
 
         handleMouseMove(e) {
@@ -2252,7 +2336,11 @@ export default {
                         return;
                     case 'c':
                         e.preventDefault();
-                        this.clipboardCopy();
+                        if (e.shiftKey) {
+                            this.clipboardCopyMerged();
+                        } else {
+                            this.clipboardCopy();
+                        }
                         return;
                     case 'x':
                         e.preventDefault();
@@ -2541,6 +2629,18 @@ export default {
             return success;
         },
 
+        clipboardCopyMerged() {
+            const app = this.getState();
+            if (!app?.clipboard) return false;
+
+            const selection = this.getSelection();
+            const success = app.clipboard.copyMerged(selection);
+            if (success) {
+                this.statusMessage = 'Copied merged to clipboard';
+            }
+            return success;
+        },
+
         clipboardCut() {
             const app = this.getState();
             if (!app?.clipboard) return false;
@@ -2656,6 +2756,8 @@ export default {
                     // Clipboard commands
                     case 'copy':
                         return { success: this.clipboardCopy() };
+                    case 'copy_merged':
+                        return { success: this.clipboardCopyMerged() };
                     case 'cut':
                         return { success: this.clipboardCut() };
                     case 'paste':

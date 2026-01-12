@@ -47,6 +47,64 @@ export class Clipboard {
     }
 
     /**
+     * Copy merged - copies from all visible layers composited together.
+     * @param {Object} selection - Optional selection rect {x, y, width, height}
+     * @returns {boolean} Success
+     */
+    copyMerged(selection = null) {
+        const layerStack = this.app.layerStack;
+        if (!layerStack || layerStack.layers.length === 0) return false;
+
+        // Determine bounds
+        let x, y, width, height;
+        const docWidth = this.app.width || layerStack.width;
+        const docHeight = this.app.height || layerStack.height;
+
+        if (selection && selection.width > 0 && selection.height > 0) {
+            x = Math.max(0, Math.floor(selection.x));
+            y = Math.max(0, Math.floor(selection.y));
+            width = Math.min(Math.ceil(selection.width), docWidth - x);
+            height = Math.min(Math.ceil(selection.height), docHeight - y);
+        } else {
+            x = 0;
+            y = 0;
+            width = docWidth;
+            height = docHeight;
+        }
+
+        if (width <= 0 || height <= 0) return false;
+
+        // Create composite canvas
+        const compositeCanvas = document.createElement('canvas');
+        compositeCanvas.width = width;
+        compositeCanvas.height = height;
+        const ctx = compositeCanvas.getContext('2d');
+
+        // Draw all visible layers (bottom to top)
+        for (const layer of layerStack.layers) {
+            if (!layer.visible) continue;
+            ctx.globalAlpha = layer.opacity;
+            const offsetX = (layer.offsetX ?? 0) - x;
+            const offsetY = (layer.offsetY ?? 0) - y;
+            ctx.drawImage(layer.canvas, offsetX, offsetY);
+        }
+        ctx.globalAlpha = 1.0;
+
+        // Get merged image data
+        const imageData = ctx.getImageData(0, 0, width, height);
+        this.buffer = {
+            imageData,
+            width,
+            height,
+            sourceX: x,
+            sourceY: y
+        };
+
+        this.app.eventBus.emit('clipboard:copy', { width, height, merged: true });
+        return true;
+    }
+
+    /**
      * Cut the current selection (copy + clear).
      * @param {Object} selection - Selection rect {x, y, width, height}
      * @returns {boolean} Success

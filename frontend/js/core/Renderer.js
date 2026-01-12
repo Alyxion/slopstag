@@ -24,6 +24,7 @@ export class Renderer {
         this.backgroundColor = '#FFFFFF';
         this.showTransparencyGrid = true;
         this.gridSize = 10;
+        this.showLayerBounds = false;  // Only show in move tool
 
         // Viewport/zoom state
         this.zoom = 1.0;
@@ -119,40 +120,36 @@ export class Renderer {
 
     /**
      * Draw bounding boxes for layers that extend outside the document bounds.
-     * Helps users find layers that are positioned off-canvas.
+     * Only shown when move tool is active (showLayerBounds = true).
      * @param {number} docWidth - Document width
      * @param {number} docHeight - Document height
      */
     drawLayerBoundingBoxes(docWidth, docHeight) {
+        // Only show bounding boxes when explicitly enabled (e.g., move tool active)
+        if (!this.showLayerBounds) return;
+
         const activeLayer = this.layerStack.getActiveLayer();
         if (!activeLayer) return;
 
-        // Only show for the active layer if it extends outside bounds
         const offsetX = activeLayer.offsetX ?? 0;
         const offsetY = activeLayer.offsetY ?? 0;
         const layerRight = offsetX + activeLayer.width;
         const layerBottom = offsetY + activeLayer.height;
 
-        // Check if layer extends outside document bounds
-        const extendsOutside = offsetX < 0 || offsetY < 0 ||
-                               layerRight > docWidth || layerBottom > docHeight;
-
-        if (!extendsOutside) return;
-
         this.displayCtx.save();
         this.displayCtx.translate(this.panX, this.panY);
         this.displayCtx.scale(this.zoom, this.zoom);
 
-        // Draw dashed bounding box around layer bounds
-        this.displayCtx.strokeStyle = '#ff6600';
-        this.displayCtx.lineWidth = 2 / this.zoom;
-        this.displayCtx.setLineDash([6 / this.zoom, 4 / this.zoom]);
+        // Draw subtle dashed bounding box around layer bounds (gray color)
+        this.displayCtx.strokeStyle = '#888888';
+        this.displayCtx.lineWidth = 1 / this.zoom;
+        this.displayCtx.setLineDash([4 / this.zoom, 4 / this.zoom]);
         this.displayCtx.strokeRect(offsetX, offsetY, activeLayer.width, activeLayer.height);
 
-        // Draw corner handles
+        // Draw small corner handles
         this.displayCtx.setLineDash([]);
-        this.displayCtx.fillStyle = '#ff6600';
-        const handleSize = 6 / this.zoom;
+        this.displayCtx.fillStyle = '#888888';
+        const handleSize = 4 / this.zoom;
         const corners = [
             { x: offsetX, y: offsetY },
             { x: layerRight, y: offsetY },

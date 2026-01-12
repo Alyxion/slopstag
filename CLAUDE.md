@@ -134,7 +134,7 @@ Execute editor commands:
 
 Available commands:
 - `undo`, `redo`
-- `copy`, `cut`, `paste`, `paste_in_place`
+- `copy`, `copy_merged`, `cut`, `paste`, `paste_in_place`
 - `select_all`, `deselect`, `delete_selection`
 - `new_layer`, `delete_layer`, `duplicate_layer`, `merge_down`, `flatten`
 - `set_foreground_color`, `set_background_color` (params: `color`)
@@ -152,7 +152,7 @@ Response: `[raw RGBA bytes]` (same dimensions as input)
 - **Shape Tools**: L (line), R (rect), C (circle/crop), P (polygon)
 - **Other Tools**: G (gradient/fill), T (text), I (eyedropper)
 - **Edit**: Ctrl+Z (undo), Ctrl+Y/Ctrl+Shift+Z (redo)
-- **Clipboard**: Ctrl+C (copy), Ctrl+X (cut), Ctrl+V (paste), Ctrl+Shift+V (paste in place)
+- **Clipboard**: Ctrl+C (copy from layer), Ctrl+Shift+C (copy merged from all layers), Ctrl+X (cut), Ctrl+V (paste), Ctrl+Shift+V (paste in place)
 - **Selection**: Ctrl+A (select all), Ctrl+D (deselect), Delete (clear selection)
 - **Colors**: X (swap FG/BG), D (reset to black/white)
 
