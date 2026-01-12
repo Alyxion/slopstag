@@ -59,6 +59,117 @@ body {
     flex-shrink: 0;
 }
 
+/* Document Tabs */
+.document-tabs {
+    height: 28px;
+    background-color: var(--bg-dark);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.document-tabs-scroll {
+    display: flex;
+    align-items: stretch;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex: 1;
+}
+
+.document-tabs-scroll::-webkit-scrollbar {
+    height: 4px;
+}
+
+.document-tabs-scroll::-webkit-scrollbar-track {
+    background: var(--bg-dark);
+}
+
+.document-tabs-scroll::-webkit-scrollbar-thumb {
+    background: var(--bg-hover);
+    border-radius: 2px;
+}
+
+.document-tab {
+    display: flex;
+    align-items: center;
+    padding: 0 8px 0 12px;
+    background-color: var(--bg-panel);
+    border-right: 1px solid var(--border);
+    cursor: pointer;
+    white-space: nowrap;
+    min-width: 80px;
+    max-width: 180px;
+}
+
+.document-tab:hover {
+    background-color: var(--bg-hover);
+}
+
+.document-tab.active {
+    background-color: var(--bg-input);
+    border-bottom: 2px solid var(--accent);
+    margin-bottom: -1px;
+}
+
+.document-tab.modified .document-tab-name::after {
+    content: ' •';
+    color: var(--accent);
+}
+
+.document-tab-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.document-tab.active .document-tab-name {
+    color: var(--text-primary);
+}
+
+.document-tab-close {
+    width: 18px;
+    height: 18px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 14px;
+    line-height: 1;
+    margin-left: 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.document-tab:hover .document-tab-close {
+    opacity: 1;
+}
+
+.document-tab-close:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+.document-tab-new {
+    width: 28px;
+    height: 100%;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.document-tab-new:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
+}
+
 .editor-main {
     flex: 1;
     display: flex;

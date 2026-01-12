@@ -48,11 +48,19 @@ export class BrushTool extends Tool {
     }
 
     updateBrushStamp() {
-        const size = Math.max(1, Math.ceil(this.size));
+        // Use higher resolution for better anti-aliasing, minimum 2x for small brushes
+        const baseSize = Math.max(1, Math.ceil(this.size));
+        const scale = baseSize < 10 ? 4 : (baseSize < 20 ? 2 : 1);
+        const size = baseSize * scale;
+
         const canvas = document.createElement('canvas');
         canvas.width = size;
         canvas.height = size;
         const ctx = canvas.getContext('2d');
+
+        // Enable anti-aliasing
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
 
         const radius = size / 2;
         const hardness = this.hardness / 100;
@@ -63,25 +71,46 @@ export class BrushTool extends Tool {
         const g = parseInt(color.slice(3, 5), 16);
         const b = parseInt(color.slice(5, 7), 16);
 
-        // Create radial gradient for soft brush
-        const gradient = ctx.createRadialGradient(radius, radius, 0, radius, radius, radius);
-
         if (hardness >= 0.99) {
-            // Hard brush - solid circle
-            gradient.addColorStop(0, `rgba(${r},${g},${b},1)`);
-            gradient.addColorStop(1, `rgba(${r},${g},${b},1)`);
+            // Hard brush - draw a proper anti-aliased circle
+            ctx.beginPath();
+            ctx.arc(radius, radius, radius - 0.5, 0, Math.PI * 2);
+            ctx.fillStyle = `rgb(${r},${g},${b})`;
+            ctx.fill();
         } else {
-            // Soft brush - gradient falloff
+            // Soft brush - use radial gradient with smooth falloff
+            const gradient = ctx.createRadialGradient(radius, radius, 0, radius, radius, radius);
             const coreSize = hardness;
+
+            // Add more color stops for smoother gradient
             gradient.addColorStop(0, `rgba(${r},${g},${b},1)`);
-            gradient.addColorStop(coreSize, `rgba(${r},${g},${b},1)`);
+            gradient.addColorStop(coreSize * 0.5, `rgba(${r},${g},${b},1)`);
+            gradient.addColorStop(coreSize, `rgba(${r},${g},${b},0.9)`);
+            gradient.addColorStop(coreSize + (1 - coreSize) * 0.3, `rgba(${r},${g},${b},0.5)`);
+            gradient.addColorStop(coreSize + (1 - coreSize) * 0.6, `rgba(${r},${g},${b},0.2)`);
             gradient.addColorStop(1, `rgba(${r},${g},${b},0)`);
+
+            // Draw as a circle, not a rectangle
+            ctx.beginPath();
+            ctx.arc(radius, radius, radius, 0, Math.PI * 2);
+            ctx.fillStyle = gradient;
+            ctx.fill();
         }
 
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, size, size);
+        // If we upscaled, create the final stamp at the correct size
+        if (scale > 1) {
+            const finalCanvas = document.createElement('canvas');
+            finalCanvas.width = baseSize;
+            finalCanvas.height = baseSize;
+            const finalCtx = finalCanvas.getContext('2d');
+            finalCtx.imageSmoothingEnabled = true;
+            finalCtx.imageSmoothingQuality = 'high';
+            finalCtx.drawImage(canvas, 0, 0, baseSize, baseSize);
+            this.brushStamp = finalCanvas;
+        } else {
+            this.brushStamp = canvas;
+        }
 
-        this.brushStamp = canvas;
         this.stampColor = color;
     }
 

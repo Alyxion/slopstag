@@ -94,7 +94,12 @@ export class Renderer {
         this.displayCtx.save();
         this.displayCtx.translate(this.panX, this.panY);
         this.displayCtx.scale(this.zoom, this.zoom);
-        this.displayCtx.imageSmoothingEnabled = this.zoom < 1;
+
+        // Always enable high-quality image smoothing for best rendering
+        // Use 'high' quality which typically corresponds to bicubic or better interpolation
+        this.displayCtx.imageSmoothingEnabled = true;
+        this.displayCtx.imageSmoothingQuality = 'high';
+
         this.displayCtx.drawImage(this.compositeCanvas, 0, 0);
         this.displayCtx.restore();
 

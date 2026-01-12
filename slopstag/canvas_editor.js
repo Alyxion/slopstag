@@ -32,6 +32,25 @@ export default {
                 </div>
             </div>
 
+            <!-- Document Tabs -->
+            <div class="document-tabs" v-if="documentTabs.length > 1 || showDocumentTabs">
+                <div class="document-tabs-scroll">
+                    <div
+                        v-for="doc in documentTabs"
+                        :key="doc.id"
+                        class="document-tab"
+                        :class="{ active: doc.isActive, modified: doc.modified }"
+                        @click="activateDocument(doc.id)"
+                        @mousedown.middle="closeDocument(doc.id)"
+                        :title="doc.name + ' (' + doc.width + 'x' + doc.height + ')'"
+                    >
+                        <span class="document-tab-name">{{ doc.displayName }}</span>
+                        <button class="document-tab-close" @click.stop="closeDocument(doc.id)" title="Close">&times;</button>
+                    </div>
+                    <button class="document-tab-new" @click="showNewDocumentDialog" title="New Document">+</button>
+                </div>
+            </div>
+
             <!-- Tool Settings Ribbon -->
             <div class="ribbon-bar" v-show="showRibbon">
                 <div class="ribbon-tool-name">{{ currentToolName }}</div>
@@ -591,6 +610,14 @@ export default {
 
             // Navigator
             navigatorDragging: false,
+            navigatorUpdatePending: false,
+            navigatorUpdateInterval: null,
+            lastNavigatorUpdate: 0,
+
+            // Documents (multi-document support)
+            documentTabs: [],
+            showDocumentTabs: true,
+            documentManager: null,
 
             // Layers
             layers: [],
@@ -699,6 +726,7 @@ export default {
                 { PenTool },
                 { BackendConnector },
                 { PluginManager },
+                { DocumentManager },
             ] = await Promise.all([
                 import('/static/js/utils/EventBus.js'),
                 import('/static/js/core/LayerStack.js'),
@@ -728,6 +756,7 @@ export default {
                 import('/static/js/tools/PenTool.js'),
                 import('/static/js/plugins/BackendConnector.js'),
                 import('/static/js/plugins/PluginManager.js'),
+                import('/static/js/core/DocumentManager.js'),
             ]);
 
             // Set up canvas
@@ -751,9 +780,13 @@ export default {
                 clipboard: null,
                 toolManager: null,
                 pluginManager: null,
+                documentManager: null,
             };
 
-            // Initialize systems
+            // Initialize document manager first (but don't create documents yet)
+            app.documentManager = new DocumentManager(app);
+
+            // Create initial empty layer stack (will be replaced when document is created)
             app.layerStack = new LayerStack(this.docWidth, this.docHeight, eventBus);
             app.renderer = new Renderer(canvas, app.layerStack);
             app.history = new History(app);
@@ -798,10 +831,16 @@ export default {
             // Store state
             editorState.set(this, app);
 
-            // Create initial layer
-            app.renderer.resize(this.docWidth, this.docHeight);
-            const bgLayer = app.layerStack.addLayer({ name: 'Background' });
-            bgLayer.fill('#FFFFFF');
+            // Create initial document through DocumentManager
+            app.documentManager.createDocument({
+                width: this.docWidth,
+                height: this.docHeight,
+                name: 'Untitled',
+                activate: true
+            });
+
+            // Update document tabs
+            this.updateDocumentTabs();
 
             // Connect to backend
             await app.pluginManager.initialize();
@@ -898,6 +937,21 @@ export default {
             });
             eventBus.on('backend:disconnected', () => {
                 this.backendConnected = false;
+            });
+
+            // Document management events
+            eventBus.on('documents:changed', () => {
+                this.updateDocumentTabs();
+            });
+            eventBus.on('document:activated', (data) => {
+                this.updateDocumentTabs();
+                this.updateLayerList();
+                this.updateHistoryState();
+                this.updateNavigator();
+                this.zoom = app.renderer.zoom;
+            });
+            eventBus.on('document:close-requested', (data) => {
+                this.showCloseDocumentDialog(data.document, data.callback);
             });
 
             // Also try to load backend data directly after initialization
@@ -1274,6 +1328,31 @@ export default {
         },
 
         // Navigator methods
+
+        /**
+         * Throttled navigator update - updates at most every 100ms during continuous operations.
+         * This provides live feedback without overwhelming the browser.
+         */
+        throttledNavigatorUpdate() {
+            const now = Date.now();
+            const minInterval = 100; // Update at most every 100ms during drawing
+
+            if (now - this.lastNavigatorUpdate > minInterval) {
+                this.updateNavigator();
+                this.lastNavigatorUpdate = now;
+                this.navigatorUpdatePending = false;
+            } else if (!this.navigatorUpdatePending) {
+                this.navigatorUpdatePending = true;
+                setTimeout(() => {
+                    if (this.navigatorUpdatePending) {
+                        this.updateNavigator();
+                        this.lastNavigatorUpdate = Date.now();
+                        this.navigatorUpdatePending = false;
+                    }
+                }, minInterval - (now - this.lastNavigatorUpdate));
+            }
+        },
+
         updateNavigator() {
             const app = this.getState();
             if (!app?.renderer || !app?.layerStack || !this.$refs.navigatorCanvas) return;
@@ -1291,6 +1370,10 @@ export default {
             canvas.width = Math.ceil(docWidth * scale);
             canvas.height = Math.ceil(docHeight * scale);
 
+            // Enable high-quality image smoothing for best preview quality
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+
             // Draw transparency pattern background
             ctx.fillStyle = '#444';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -1306,11 +1389,15 @@ export default {
                 }
             }
 
-            // Draw layers
+            // Draw layers with proper offsets and high-quality scaling
             for (const layer of app.layerStack.layers) {
                 if (!layer.visible) continue;
                 ctx.globalAlpha = layer.opacity;
-                ctx.drawImage(layer.canvas, 0, 0, canvas.width, canvas.height);
+                const offsetX = (layer.offsetX ?? 0) * scale;
+                const offsetY = (layer.offsetY ?? 0) * scale;
+                const layerWidth = layer.width * scale;
+                const layerHeight = layer.height * scale;
+                ctx.drawImage(layer.canvas, offsetX, offsetY, layerWidth, layerHeight);
             }
             ctx.globalAlpha = 1;
 
@@ -1438,6 +1525,42 @@ export default {
                 this.activeLayerOpacity = Math.round(layer.opacity * 100);
                 this.activeLayerBlendMode = layer.blendMode;
             }
+        },
+
+        // Document management methods
+        updateDocumentTabs() {
+            const app = this.getState();
+            if (!app?.documentManager) return;
+            this.documentTabs = app.documentManager.getDocumentList();
+        },
+
+        activateDocument(documentId) {
+            const app = this.getState();
+            if (!app?.documentManager) return;
+            app.documentManager.setActiveDocument(documentId);
+        },
+
+        closeDocument(documentId) {
+            const app = this.getState();
+            if (!app?.documentManager) return;
+            app.documentManager.closeDocument(documentId);
+        },
+
+        showNewDocumentDialog() {
+            // For now, create a new document with default settings
+            // Could show a dialog for width/height in the future
+            const app = this.getState();
+            if (!app?.documentManager) return;
+            app.documentManager.createDocument({
+                width: this.docWidth,
+                height: this.docHeight
+            });
+        },
+
+        showCloseDocumentDialog(document, callback) {
+            // Simple confirmation dialog for unsaved changes
+            const confirmed = confirm(`"${document.name}" has unsaved changes. Close anyway?`);
+            if (callback) callback(confirmed);
         },
 
         formatCategory(category) {
@@ -2061,6 +2184,11 @@ export default {
             }
 
             app.toolManager.currentTool?.onMouseMove(e, x, y);
+
+            // Update navigator during drawing for live feedback
+            if (e.buttons === 1) {  // Left mouse button is down
+                this.throttledNavigatorUpdate();
+            }
         },
 
         handleMouseUp(e) {
@@ -2078,6 +2206,9 @@ export default {
             const { x, y } = app.renderer.screenToCanvas(screenX, screenY);
 
             app.toolManager.currentTool?.onMouseUp(e, x, y);
+
+            // Final navigator update after action completes
+            this.updateNavigator();
         },
 
         handleMouseLeave(e) {

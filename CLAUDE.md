@@ -14,6 +14,8 @@ python main.py
 - **Modular tools**: One file per tool, registry-based extensibility
 - **Raw transfer**: Uncompressed RGBA bytes for filter I/O (no Base64)
 - **API-first**: ALL tools and features MUST be accessible via REST API
+- **Multi-document**: Multiple documents open simultaneously, each with independent history/layers
+- **High-quality rendering**: Bicubic interpolation for zoom, anti-aliased brush strokes
 
 ## Development
 - NiceGUI hot-reloads on code changes (JS, CSS, Python)
@@ -71,6 +73,15 @@ export class MyTool extends Tool {
 - Filters in `slopstag/filters/`
 - UI components in `frontend/js/ui/`
 - Core canvas logic in `frontend/js/core/`
+
+### Core Classes (`frontend/js/core/`)
+- **Document.js** - Single document with its own LayerStack, History, colors, view state
+- **DocumentManager.js** - Manages multiple open documents, tab switching, close prompts
+- **Layer.js** - Individual layer with canvas, opacity, blend mode
+- **LayerStack.js** - Layer ordering, active layer selection, merge/flatten
+- **Renderer.js** - Composites layers to display canvas with zoom/pan
+- **History.js** - Undo/redo with automatic pixel diff detection
+- **Clipboard.js** - Cut/copy/paste with selection support
 
 ## API Endpoints
 
@@ -144,3 +155,47 @@ Response: `[raw RGBA bytes]` (same dimensions as input)
 - **Clipboard**: Ctrl+C (copy), Ctrl+X (cut), Ctrl+V (paste), Ctrl+Shift+V (paste in place)
 - **Selection**: Ctrl+A (select all), Ctrl+D (deselect), Delete (clear selection)
 - **Colors**: X (swap FG/BG), D (reset to black/white)
+
+## Multi-Document Support
+
+The editor supports multiple documents open simultaneously, similar to GIMP and Photoshop.
+
+### Features
+- **Document tabs**: Tab bar shows all open documents
+- **Independent state**: Each document has its own layers, history, colors, and view state
+- **Tab interactions**:
+  - Click tab to switch documents
+  - Middle-click tab to close
+  - Click × button to close
+  - Click + button to create new document
+- **Modified indicator**: Documents with unsaved changes show a dot (•) after the name
+- **Unsaved changes prompt**: Closing a modified document shows a confirmation dialog
+
+### Document State
+Each document maintains:
+- LayerStack (all layers and their pixel data)
+- History (independent undo/redo stack)
+- Foreground/background colors
+- View state (zoom level, pan position)
+- Document dimensions (width × height)
+- Modified flag
+
+### Implementation
+- `Document` class encapsulates all document state
+- `DocumentManager` handles document lifecycle and switching
+- When switching documents, the app context (layerStack, history, renderer) is updated to point to the new document's data
+
+## Rendering Quality
+
+The editor uses high-quality rendering techniques for professional results.
+
+### Canvas Rendering
+- **Bicubic interpolation**: `imageSmoothingQuality = 'high'` for zoom operations
+- **Always smooth**: Image smoothing enabled at all zoom levels for best quality
+- **Navigator preview**: High-quality scaled preview with live updates during drawing
+
+### Brush Quality
+- **Anti-aliased circles**: Brush stamps use `ctx.arc()` for proper circular shapes
+- **Supersampling**: Small brushes (< 20px) rendered at 2x-4x resolution then downscaled
+- **Smooth gradients**: Soft brushes use multi-stop radial gradients for natural falloff
+- **Live preview**: Navigator updates every 100ms during brush strokes
