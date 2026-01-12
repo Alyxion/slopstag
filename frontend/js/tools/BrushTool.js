@@ -145,4 +145,53 @@ export class BrushTool extends Tool {
             { id: 'flow', name: 'Flow', type: 'range', min: 1, max: 100, step: 1, value: this.flow }
         ];
     }
+
+    // API execution
+    executeAction(action, params) {
+        const layer = this.app.layerStack.getActiveLayer();
+        if (!layer || layer.locked) {
+            return { success: false, error: 'No active layer or layer is locked' };
+        }
+
+        if (action === 'stroke' && params.points && params.points.length >= 1) {
+            // Apply optional parameters
+            if (params.size !== undefined) this.size = params.size;
+            if (params.hardness !== undefined) this.hardness = params.hardness;
+            if (params.opacity !== undefined) this.opacity = params.opacity;
+            if (params.flow !== undefined) this.flow = params.flow;
+            if (params.color) {
+                this.app.foregroundColor = params.color;
+            }
+            this.updateBrushStamp();
+
+            this.app.history.saveState('brush_api');
+
+            const points = params.points;
+            // Draw first point
+            this.drawStamp(layer, points[0][0], points[0][1]);
+
+            // Draw lines between consecutive points
+            for (let i = 1; i < points.length; i++) {
+                this.drawLine(layer, points[i-1][0], points[i-1][1], points[i][0], points[i][1]);
+            }
+
+            this.app.renderer.requestRender();
+            return { success: true };
+        }
+
+        if (action === 'dot' && params.x !== undefined && params.y !== undefined) {
+            if (params.size !== undefined) this.size = params.size;
+            if (params.color) {
+                this.app.foregroundColor = params.color;
+            }
+            this.updateBrushStamp();
+
+            this.app.history.saveState('brush_dot');
+            this.drawStamp(layer, params.x, params.y);
+            this.app.renderer.requestRender();
+            return { success: true };
+        }
+
+        return { success: false, error: `Unknown action: ${action}` };
+    }
 }

@@ -71,12 +71,13 @@ export default {
                 <!-- Color Palette Panel (below tool panel) -->
                 <div class="color-palette-panel">
                     <div class="panel-header">Colors</div>
-                    <!-- Common Colors -->
+                    <!-- Quick Colors -->
                     <div class="color-palette-section">
-                        <div class="color-palette-grid">
+                        <div class="section-label">Quick</div>
+                        <div class="color-palette-grid quick-colors">
                             <div
                                 v-for="color in commonColors"
-                                :key="color"
+                                :key="'quick-'+color"
                                 class="palette-color"
                                 :style="{ backgroundColor: color }"
                                 :title="color"
@@ -88,10 +89,10 @@ export default {
                     <!-- Recent Colors -->
                     <div class="color-palette-section" v-if="recentColors.length > 0">
                         <div class="section-label">Recent</div>
-                        <div class="color-palette-grid">
+                        <div class="color-palette-grid recent-colors">
                             <div
-                                v-for="color in recentColors"
-                                :key="color"
+                                v-for="(color, idx) in recentColors"
+                                :key="'recent-'+idx"
                                 class="palette-color"
                                 :style="{ backgroundColor: color }"
                                 :title="color"
@@ -100,14 +101,25 @@ export default {
                             </div>
                         </div>
                     </div>
-                    <!-- Full Picker Toggle -->
+                    <!-- Full Palette Toggle -->
                     <div class="color-palette-section">
                         <button class="expand-picker-btn" @click="showFullPicker = !showFullPicker">
-                            {{ showFullPicker ? '▲ Hide Picker' : '▼ Full Picker' }}
+                            {{ showFullPicker ? '▲ Hide Palette' : '▼ Full Palette' }}
                         </button>
                         <div v-if="showFullPicker" class="full-color-picker">
-                            <input type="color" class="full-picker-input" :value="fgColor" @input="setForegroundColor($event.target.value)">
+                            <div class="color-palette-grid full-palette">
+                                <div
+                                    v-for="(color, idx) in colorPalette"
+                                    :key="'palette-'+idx"
+                                    class="palette-color small"
+                                    :style="{ backgroundColor: color }"
+                                    :title="color"
+                                    @click="setForegroundColor(color)"
+                                    @contextmenu.prevent="setBackgroundColor(color)">
+                                </div>
+                            </div>
                             <div class="hex-input-row">
+                                <input type="color" class="color-picker-native" :value="fgColor" @input="setForegroundColor($event.target.value)">
                                 <input
                                     type="text"
                                     class="hex-input"
@@ -233,12 +245,24 @@ export default {
                 <template v-else-if="activeMenu === 'edit'">
                     <div class="menu-item" @click="menuAction('undo')">Undo (Ctrl+Z)</div>
                     <div class="menu-item" @click="menuAction('redo')">Redo (Ctrl+Y)</div>
+                    <div class="menu-separator"></div>
+                    <div class="menu-item" @click="menuAction('cut')">Cut (Ctrl+X)</div>
+                    <div class="menu-item" @click="menuAction('copy')">Copy (Ctrl+C)</div>
+                    <div class="menu-item" @click="menuAction('paste')">Paste (Ctrl+V)</div>
+                    <div class="menu-item" @click="menuAction('paste_in_place')">Paste in Place (Ctrl+Shift+V)</div>
+                    <div class="menu-separator"></div>
+                    <div class="menu-item" @click="menuAction('select_all')">Select All (Ctrl+A)</div>
+                    <div class="menu-item" @click="menuAction('deselect')">Deselect (Ctrl+D)</div>
                 </template>
                 <template v-else-if="activeMenu === 'filter'">
                     <div class="menu-item disabled" v-if="filters.length === 0">No filters available</div>
-                    <div class="menu-item" v-for="f in filters" :key="f.id" @click="menuAction('filter', f)">
-                        {{ f.name }}
-                    </div>
+                    <template v-for="(categoryFilters, category) in filtersByCategory" :key="category">
+                        <div class="menu-header">{{ formatCategory(category) }}</div>
+                        <div class="menu-item" v-for="f in categoryFilters" :key="f.id" @click="menuAction('filter', f)">
+                            {{ f.name }}
+                        </div>
+                        <div class="menu-separator"></div>
+                    </template>
                 </template>
                 <template v-else-if="activeMenu === 'image'">
                     <div class="menu-item" @click="menuAction('flatten')">Flatten Image</div>
@@ -254,6 +278,37 @@ export default {
         sessionId: { type: String, default: '' },
     },
 
+    computed: {
+        filtersByCategory() {
+            // Group filters by category
+            const categories = {};
+            const categoryOrder = ['color', 'blur', 'edge', 'threshold', 'morphology', 'artistic', 'noise', 'sharpen', 'uncategorized'];
+
+            for (const filter of this.filters) {
+                const cat = filter.category || 'uncategorized';
+                if (!categories[cat]) {
+                    categories[cat] = [];
+                }
+                categories[cat].push(filter);
+            }
+
+            // Sort by category order
+            const sorted = {};
+            for (const cat of categoryOrder) {
+                if (categories[cat]) {
+                    sorted[cat] = categories[cat];
+                }
+            }
+            // Add any remaining categories
+            for (const cat in categories) {
+                if (!sorted[cat]) {
+                    sorted[cat] = categories[cat];
+                }
+            }
+            return sorted;
+        },
+    },
+
     data() {
         return {
             // Document state
@@ -264,11 +319,36 @@ export default {
             // Colors
             fgColor: '#000000',
             bgColor: '#FFFFFF',
+            // Professional color palette (similar to Photoshop/GIMP)
+            colorPalette: [
+                // Row 1: Grayscale
+                '#000000', '#1a1a1a', '#333333', '#4d4d4d', '#666666', '#808080',
+                '#999999', '#b3b3b3', '#cccccc', '#e6e6e6', '#f2f2f2', '#ffffff',
+                // Row 2: Reds
+                '#330000', '#660000', '#990000', '#cc0000', '#ff0000', '#ff3333',
+                '#ff6666', '#ff9999', '#ffcccc', '#ff6600', '#ff9933', '#ffcc66',
+                // Row 3: Oranges/Yellows
+                '#331a00', '#663300', '#994d00', '#cc6600', '#ff8000', '#ffb366',
+                '#332600', '#665200', '#997a00', '#cca300', '#ffcc00', '#ffe066',
+                // Row 4: Greens
+                '#003300', '#006600', '#009900', '#00cc00', '#00ff00', '#33ff33',
+                '#66ff66', '#99ff99', '#ccffcc', '#003319', '#006633', '#00994d',
+                // Row 5: Cyans
+                '#003333', '#006666', '#009999', '#00cccc', '#00ffff', '#33ffff',
+                '#66ffff', '#99ffff', '#ccffff', '#001a33', '#003366', '#004d99',
+                // Row 6: Blues
+                '#000033', '#000066', '#000099', '#0000cc', '#0000ff', '#3333ff',
+                '#6666ff', '#9999ff', '#ccccff', '#19004d', '#330099', '#4d00cc',
+                // Row 7: Purples/Magentas
+                '#330033', '#660066', '#990099', '#cc00cc', '#ff00ff', '#ff33ff',
+                '#ff66ff', '#ff99ff', '#ffccff', '#4d0033', '#990066', '#cc0099',
+                // Row 8: Skin tones + Browns
+                '#ffd5c8', '#f5c4b8', '#e8b298', '#d4a076', '#c68642', '#8d5524',
+                '#663d14', '#4a2c0a', '#331f06', '#ffe4c4', '#deb887', '#d2691e',
+            ],
             commonColors: [
-                '#000000', '#FFFFFF', '#808080', '#C0C0C0',
-                '#FF0000', '#00FF00', '#0000FF', '#FFFF00',
-                '#FF00FF', '#00FFFF', '#800000', '#008000',
-                '#000080', '#808000', '#800080', '#008080',
+                '#000000', '#FFFFFF', '#FF0000', '#00FF00', '#0000FF', '#FFFF00',
+                '#FF00FF', '#00FFFF', '#FF8000', '#8000FF', '#00FF80', '#FF0080',
             ],
             recentColors: [],
             showFullPicker: false,
@@ -344,6 +424,7 @@ export default {
                 { LayerStack },
                 { Renderer },
                 { History },
+                { Clipboard },
                 { ToolManager },
                 { BrushTool },
                 { EraserTool },
@@ -354,6 +435,14 @@ export default {
                 { LineTool },
                 { RectTool },
                 { CircleTool },
+                { SelectionTool },
+                { SprayTool },
+                { TextTool },
+                { GradientTool },
+                { PolygonTool },
+                { MagicWandTool },
+                { LassoTool },
+                { CropTool },
                 { BackendConnector },
                 { PluginManager },
             ] = await Promise.all([
@@ -361,6 +450,7 @@ export default {
                 import('/static/js/core/LayerStack.js'),
                 import('/static/js/core/Renderer.js'),
                 import('/static/js/core/History.js'),
+                import('/static/js/core/Clipboard.js'),
                 import('/static/js/tools/ToolManager.js'),
                 import('/static/js/tools/BrushTool.js'),
                 import('/static/js/tools/EraserTool.js'),
@@ -371,6 +461,14 @@ export default {
                 import('/static/js/tools/LineTool.js'),
                 import('/static/js/tools/RectTool.js'),
                 import('/static/js/tools/CircleTool.js'),
+                import('/static/js/tools/SelectionTool.js'),
+                import('/static/js/tools/SprayTool.js'),
+                import('/static/js/tools/TextTool.js'),
+                import('/static/js/tools/GradientTool.js'),
+                import('/static/js/tools/PolygonTool.js'),
+                import('/static/js/tools/MagicWandTool.js'),
+                import('/static/js/tools/LassoTool.js'),
+                import('/static/js/tools/CropTool.js'),
                 import('/static/js/plugins/BackendConnector.js'),
                 import('/static/js/plugins/PluginManager.js'),
             ]);
@@ -393,6 +491,7 @@ export default {
                 layerStack: null,
                 renderer: null,
                 history: null,
+                clipboard: null,
                 toolManager: null,
                 pluginManager: null,
             };
@@ -401,19 +500,28 @@ export default {
             app.layerStack = new LayerStack(this.docWidth, this.docHeight, eventBus);
             app.renderer = new Renderer(canvas, app.layerStack);
             app.history = new History(app);
+            app.clipboard = new Clipboard(app);
             app.toolManager = new ToolManager(app);
             app.pluginManager = new PluginManager(app);
 
             // Register tools
+            app.toolManager.register(SelectionTool);
+            app.toolManager.register(LassoTool);
+            app.toolManager.register(MagicWandTool);
             app.toolManager.register(MoveTool);
             app.toolManager.register(BrushTool);
+            app.toolManager.register(SprayTool);
             app.toolManager.register(EraserTool);
             app.toolManager.register(LineTool);
             app.toolManager.register(RectTool);
             app.toolManager.register(CircleTool);
+            app.toolManager.register(PolygonTool);
             app.toolManager.register(ShapeTool);
             app.toolManager.register(FillTool);
+            app.toolManager.register(GradientTool);
+            app.toolManager.register(TextTool);
             app.toolManager.register(EyedropperTool);
+            app.toolManager.register(CropTool);
 
             // Store state
             editorState.set(this, app);
@@ -457,13 +565,25 @@ export default {
                 this.bgColor = data.color;
             });
 
-            eventBus.on('plugin:backend-connected', () => {
+            eventBus.on('backend:connected', () => {
                 this.backendConnected = true;
                 this.loadBackendData();
             });
-            eventBus.on('plugin:backend-disconnected', () => {
+            eventBus.on('backend:disconnected', () => {
                 this.backendConnected = false;
             });
+
+            // Also try to load backend data directly after initialization
+            // (in case the event was missed)
+            setTimeout(() => {
+                if (!this.backendConnected) {
+                    this.loadBackendData().then(() => {
+                        if (this.filters.length > 0) {
+                            this.backendConnected = true;
+                        }
+                    });
+                }
+            }, 1000);
 
             this.statusMessage = 'Ready';
             console.log('Slopstag Editor initialized');
@@ -471,12 +591,13 @@ export default {
 
         async loadBackendData() {
             const app = this.getState();
-            if (!app?.pluginManager?.connector) return;
+            if (!app?.pluginManager) return;
 
             try {
                 const filtersResponse = await fetch(`${this.apiBase}/filters`);
                 if (filtersResponse.ok) {
-                    this.filters = await filtersResponse.json();
+                    const data = await filtersResponse.json();
+                    this.filters = data.filters || [];
                 }
 
                 const sourcesResponse = await fetch(`${this.apiBase}/images/sources`);
@@ -546,14 +667,41 @@ export default {
             }
         },
 
+        formatCategory(category) {
+            // Format category name for display
+            const names = {
+                'color': 'Color Adjustments',
+                'blur': 'Blur & Smooth',
+                'edge': 'Edge Detection',
+                'threshold': 'Threshold',
+                'morphology': 'Morphological',
+                'artistic': 'Artistic Effects',
+                'noise': 'Noise',
+                'sharpen': 'Sharpen',
+                'uncategorized': 'Other',
+            };
+            return names[category] || category.charAt(0).toUpperCase() + category.slice(1);
+        },
+
         getToolIcon(icon) {
             const icons = {
-                'move': '&#9995;',
-                'brush': '&#128396;',
-                'eraser': '&#9986;',
-                'shape': '&#9634;',
-                'fill': '&#128276;',
-                'eyedropper': '&#128083;',
+                'selection': '&#9633;',    // White square (selection)
+                'lasso': '&#10551;',       // Lasso curve
+                'magicwand': '&#10022;',   // Star/wand
+                'move': '&#9995;',         // Hand
+                'brush': '&#128396;',      // Pencil
+                'spray': '&#9729;',        // Cloud (spray)
+                'eraser': '&#9986;',       // Scissors
+                'line': '&#9585;',         // Diagonal line
+                'rect': '&#9634;',         // Square
+                'circle': '&#9679;',       // Circle
+                'polygon': '&#11039;',     // Pentagon
+                'shape': '&#9671;',        // Diamond
+                'fill': '&#128276;',       // Bell (bucket)
+                'gradient': '&#9698;',     // Gradient triangle
+                'text': '&#84;',           // Letter T
+                'eyedropper': '&#128083;', // Eyeglasses
+                'crop': '&#8862;',         // Crop frame
             };
             return icons[icon] || '&#9679;';
         },
@@ -643,6 +791,8 @@ export default {
             const index = app.layerStack.getLayerIndex(layerId);
             if (index >= 0) {
                 app.layerStack.setActiveLayer(index);
+                this.activeLayerId = layerId;
+                this.updateLayerControls();
             }
         },
 
@@ -772,6 +922,24 @@ export default {
                 case 'redo':
                     app?.history?.redo();
                     break;
+                case 'cut':
+                    this.clipboardCut();
+                    break;
+                case 'copy':
+                    this.clipboardCopy();
+                    break;
+                case 'paste':
+                    this.clipboardPaste();
+                    break;
+                case 'paste_in_place':
+                    this.clipboardPasteInPlace();
+                    break;
+                case 'select_all':
+                    this.selectAll();
+                    break;
+                case 'deselect':
+                    this.deselect();
+                    break;
                 case 'filter':
                     if (data) await this.applyFilter(data.id, {});
                     break;
@@ -869,20 +1037,49 @@ export default {
             const app = this.getState();
             if (!app) return;
 
-            // Undo/Redo
+            // Ctrl/Cmd shortcuts
             if (e.ctrlKey || e.metaKey) {
-                if (e.key === 'z' && !e.shiftKey) {
-                    e.preventDefault();
-                    app.history.undo();
-                    return;
-                } else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
-                    e.preventDefault();
-                    app.history.redo();
-                    return;
+                switch (e.key.toLowerCase()) {
+                    case 'z':
+                        e.preventDefault();
+                        if (e.shiftKey) {
+                            app.history.redo();
+                        } else {
+                            app.history.undo();
+                        }
+                        return;
+                    case 'y':
+                        e.preventDefault();
+                        app.history.redo();
+                        return;
+                    case 'c':
+                        e.preventDefault();
+                        this.clipboardCopy();
+                        return;
+                    case 'x':
+                        e.preventDefault();
+                        this.clipboardCut();
+                        return;
+                    case 'v':
+                        e.preventDefault();
+                        if (e.shiftKey) {
+                            this.clipboardPasteInPlace();
+                        } else {
+                            this.clipboardPaste();
+                        }
+                        return;
+                    case 'a':
+                        e.preventDefault();
+                        this.selectAll();
+                        return;
+                    case 'd':
+                        e.preventDefault();
+                        this.deselect();
+                        return;
                 }
             }
 
-            // Tool shortcuts
+            // Tool shortcuts (no modifiers)
             if (!e.ctrlKey && !e.metaKey && !e.altKey) {
                 if (e.key === 'x' || e.key === 'X') {
                     this.swapColors();
@@ -890,6 +1087,16 @@ export default {
                 }
                 if (e.key === 'd' || e.key === 'D') {
                     this.resetColors();
+                    return;
+                }
+                // Escape to deselect
+                if (e.key === 'Escape') {
+                    this.deselect();
+                    return;
+                }
+                // Delete to clear selection
+                if (e.key === 'Delete' || e.key === 'Backspace') {
+                    this.deleteSelection();
                     return;
                 }
                 if (app.toolManager.handleShortcut(e.key)) {
@@ -1041,6 +1248,101 @@ export default {
             link.click();
         },
 
+        // ===== Selection Methods =====
+
+        getSelection() {
+            const app = this.getState();
+            const selectionTool = app?.toolManager?.tools.get('selection');
+            return selectionTool?.getSelection() || null;
+        },
+
+        selectAll() {
+            const app = this.getState();
+            const selectionTool = app?.toolManager?.tools.get('selection');
+            if (selectionTool) {
+                selectionTool.selectAll();
+                // Switch to selection tool
+                app.toolManager.select('selection');
+            }
+        },
+
+        deselect() {
+            const app = this.getState();
+            const selectionTool = app?.toolManager?.tools.get('selection');
+            selectionTool?.clearSelection();
+        },
+
+        deleteSelection() {
+            const app = this.getState();
+            if (!app) return;
+
+            const selection = this.getSelection();
+            const layer = app.layerStack.getActiveLayer();
+            if (!layer || layer.locked) return;
+
+            if (selection && selection.width > 0 && selection.height > 0) {
+                app.history.saveState('delete_selection');
+                layer.ctx.clearRect(
+                    Math.floor(selection.x),
+                    Math.floor(selection.y),
+                    Math.ceil(selection.width),
+                    Math.ceil(selection.height)
+                );
+                app.renderer.requestRender();
+            }
+        },
+
+        // ===== Clipboard Methods =====
+
+        clipboardCopy() {
+            const app = this.getState();
+            if (!app?.clipboard) return false;
+
+            const selection = this.getSelection();
+            const success = app.clipboard.copy(selection);
+            if (success) {
+                this.statusMessage = 'Copied to clipboard';
+            }
+            return success;
+        },
+
+        clipboardCut() {
+            const app = this.getState();
+            if (!app?.clipboard) return false;
+
+            const selection = this.getSelection();
+            const success = app.clipboard.cut(selection);
+            if (success) {
+                this.statusMessage = 'Cut to clipboard';
+                app.renderer.requestRender();
+            }
+            return success;
+        },
+
+        clipboardPaste() {
+            const app = this.getState();
+            if (!app?.clipboard) return false;
+
+            const success = app.clipboard.paste({ asNewLayer: true });
+            if (success) {
+                this.statusMessage = 'Pasted as new layer';
+                this.updateLayerList();
+            }
+            return success;
+        },
+
+        clipboardPasteInPlace() {
+            const app = this.getState();
+            if (!app?.clipboard) return false;
+
+            const success = app.clipboard.pasteInPlace(true);
+            if (success) {
+                this.statusMessage = 'Pasted in place';
+                this.updateLayerList();
+            }
+            return success;
+        },
+
         // ===== Session API Methods (called from Python) =====
 
         emitStateUpdate() {
@@ -1104,6 +1406,25 @@ export default {
                     case 'new_document':
                         if (params.width && params.height) this.newDocument(params.width, params.height);
                         break;
+                    // Selection commands
+                    case 'select_all':
+                        this.selectAll();
+                        break;
+                    case 'deselect':
+                        this.deselect();
+                        break;
+                    case 'delete_selection':
+                        this.deleteSelection();
+                        break;
+                    // Clipboard commands
+                    case 'copy':
+                        return { success: this.clipboardCopy() };
+                    case 'cut':
+                        return { success: this.clipboardCut() };
+                    case 'paste':
+                        return { success: this.clipboardPaste() };
+                    case 'paste_in_place':
+                        return { success: this.clipboardPasteInPlace() };
                     default:
                         return { success: false, error: `Unknown command: ${command}` };
                 }

@@ -20,4 +20,4 @@ def register_filter(filter_id: str):
 
 def load_builtin_filters():
     """Import all built-in filter modules to trigger registration."""
-    from . import blur, color, edge, sharpen  # noqa: F401
+    from . import blur, color, edge, sharpen, morphology, threshold, artistic, noise  # noqa: F401
