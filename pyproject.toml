@@ -1,0 +1,57 @@
+[project]
+name = "slopstag"
+version = "0.1.0"
+description = "Online image manipulation tool - JS-first editor with Python backend filters"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.12"
+dependencies = [
+    "nicegui>=2.0.0",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.32.0",
+    "numpy>=2.0.0",
+    "scikit-image>=0.24.0",
+    "scipy>=1.14.0",
+    "pillow>=11.0.0",
+    "opencv-python>=4.10.0",
+    "resvg-py>=0.1.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "httpx>=0.27.0",
+]
+
+[build-system]
+requires = ["poetry-core>=2.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "slopstag"
+version = "0.1.0"
+description = "Online image manipulation tool - JS-first editor with Python backend filters"
+authors = []
+packages = [{ include = "slopstag" }]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+nicegui = "^2.0.0"
+fastapi = "^0.115.0"
+uvicorn = "^0.32.0"
+numpy = "^2.0.0"
+scikit-image = "^0.24.0"
+scipy = "^1.14.0"
+pillow = "^11.0.0"
+opencv-python = "^4.10.0"
+resvg-py = "^0.1.0"
+pydantic = "^2.0.0"
+pydantic-settings = "^2.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+pytest-asyncio = "^0.24.0"
+httpx = "^0.27.0"
