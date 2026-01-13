@@ -192,6 +192,10 @@ export class LassoTool extends Tool {
         return [];
     }
 
+    getHint() {
+        return 'Draw freeform selection, release to complete';
+    }
+
     // API execution
     executeAction(action, params) {
         if (action === 'select' && params.points && params.points.length >= 3) {

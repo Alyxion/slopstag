@@ -450,3 +450,198 @@ class ToolHelper:
             'height': height
         }
         return self.execute_tool_action('selection', 'select', params)
+
+    # ===== Pencil Tool =====
+
+    def pencil_stroke(self, points: List[Tuple[float, float]],
+                      color: str = None, size: int = None):
+        """
+        Draw a pencil stroke (hard-edged, aliased) through multiple points.
+
+        Args:
+            points: List of (x, y) document coordinates
+            color: Pencil color (hex), or None for current foreground
+            size: Pencil size in pixels (default 1 for pixel art)
+        """
+        if color:
+            self.editor.set_foreground_color(color)
+
+        self.editor.select_tool('pencil')
+
+        if size is not None:
+            self.editor.set_tool_property('size', size)
+
+        self.editor.draw_stroke(points)
+        return self
+
+    def pencil_line(self, x1: float, y1: float, x2: float, y2: float,
+                    color: str = None, size: int = 1):
+        """Draw a straight pencil line from (x1, y1) to (x2, y2)."""
+        return self.pencil_stroke([(x1, y1), (x2, y2)], color=color, size=size)
+
+    # ===== Clone Stamp Tool =====
+
+    def clone_stamp_set_source(self, x: float, y: float):
+        """Set the clone stamp source point."""
+        self.editor.select_tool('clonestamp')
+        # Alt+click to set source
+        self.editor.alt_click_at_doc(x, y)
+        return self
+
+    def clone_stamp_stroke(self, points: List[Tuple[float, float]], size: int = None):
+        """
+        Paint with clone stamp.
+        Must call clone_stamp_set_source first.
+
+        Args:
+            points: List of (x, y) document coordinates to paint at
+            size: Stamp size in pixels
+        """
+        self.editor.select_tool('clonestamp')
+
+        if size is not None:
+            self.editor.set_tool_property('size', size)
+
+        self.editor.draw_stroke(points)
+        return self
+
+    # ===== Smudge Tool =====
+
+    def smudge_stroke(self, points: List[Tuple[float, float]],
+                      size: int = None, strength: int = None):
+        """
+        Smudge along a path.
+
+        Args:
+            points: List of (x, y) document coordinates
+            size: Smudge tool size
+            strength: Smudge strength 0-100
+        """
+        self.editor.select_tool('smudge')
+
+        if size is not None:
+            self.editor.set_tool_property('size', size)
+        if strength is not None:
+            self.editor.set_tool_property('strength', strength)
+
+        self.editor.draw_stroke(points)
+        return self
+
+    # ===== Blur Tool =====
+
+    def blur_stroke(self, points: List[Tuple[float, float]],
+                    size: int = None, strength: int = None):
+        """
+        Apply blur effect along a path.
+
+        Args:
+            points: List of (x, y) document coordinates
+            size: Blur tool size
+            strength: Blur strength 0-100
+        """
+        self.editor.select_tool('blur')
+
+        if size is not None:
+            self.editor.set_tool_property('size', size)
+        if strength is not None:
+            self.editor.set_tool_property('strength', strength)
+
+        self.editor.draw_stroke(points)
+        return self
+
+    # ===== Sharpen Tool =====
+
+    def sharpen_stroke(self, points: List[Tuple[float, float]],
+                       size: int = None, strength: int = None):
+        """
+        Apply sharpen effect along a path.
+
+        Args:
+            points: List of (x, y) document coordinates
+            size: Sharpen tool size
+            strength: Sharpen strength 0-100
+        """
+        self.editor.select_tool('sharpen')
+
+        if size is not None:
+            self.editor.set_tool_property('size', size)
+        if strength is not None:
+            self.editor.set_tool_property('strength', strength)
+
+        self.editor.draw_stroke(points)
+        return self
+
+    # ===== Dodge Tool =====
+
+    def dodge_stroke(self, points: List[Tuple[float, float]],
+                     size: int = None, exposure: int = None, range_: str = None):
+        """
+        Lighten areas along a path.
+
+        Args:
+            points: List of (x, y) document coordinates
+            size: Dodge tool size
+            exposure: Exposure 0-100
+            range_: Target range ('shadows', 'midtones', 'highlights')
+        """
+        self.editor.select_tool('dodge')
+
+        if size is not None:
+            self.editor.set_tool_property('size', size)
+        if exposure is not None:
+            self.editor.set_tool_property('exposure', exposure)
+        if range_ is not None:
+            self.editor.set_tool_property('range', range_)
+
+        self.editor.draw_stroke(points)
+        return self
+
+    # ===== Burn Tool =====
+
+    def burn_stroke(self, points: List[Tuple[float, float]],
+                    size: int = None, exposure: int = None, range_: str = None):
+        """
+        Darken areas along a path.
+
+        Args:
+            points: List of (x, y) document coordinates
+            size: Burn tool size
+            exposure: Exposure 0-100
+            range_: Target range ('shadows', 'midtones', 'highlights')
+        """
+        self.editor.select_tool('burn')
+
+        if size is not None:
+            self.editor.set_tool_property('size', size)
+        if exposure is not None:
+            self.editor.set_tool_property('exposure', exposure)
+        if range_ is not None:
+            self.editor.set_tool_property('range', range_)
+
+        self.editor.draw_stroke(points)
+        return self
+
+    # ===== Sponge Tool =====
+
+    def sponge_stroke(self, points: List[Tuple[float, float]],
+                      size: int = None, flow: int = None, mode: str = None):
+        """
+        Saturate or desaturate along a path.
+
+        Args:
+            points: List of (x, y) document coordinates
+            size: Sponge tool size
+            flow: Flow 0-100
+            mode: 'saturate' or 'desaturate'
+        """
+        self.editor.select_tool('sponge')
+
+        if size is not None:
+            self.editor.set_tool_property('size', size)
+        if flow is not None:
+            self.editor.set_tool_property('flow', flow)
+        if mode is not None:
+            self.editor.set_tool_property('mode', mode)
+
+        self.editor.draw_stroke(points)
+        return self

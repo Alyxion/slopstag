@@ -3,13 +3,14 @@
  */
 import { Tool } from './Tool.js';
 import { BrushPresets, DEFAULT_PRESET, getPreset } from '../data/BrushPresets.js';
+import { BrushCursor } from '../utils/BrushCursor.js';
 
 export class BrushTool extends Tool {
     static id = 'brush';
     static name = 'Brush';
     static icon = 'brush';
     static shortcut = 'b';
-    static cursor = 'crosshair';
+    static cursor = 'none';  // Hide default cursor, we draw our own
 
     constructor(app) {
         super(app);
@@ -29,6 +30,13 @@ export class BrushTool extends Tool {
         this.lastX = 0;
         this.lastY = 0;
 
+        // Cursor position for overlay
+        this.cursorX = 0;
+        this.cursorY = 0;
+
+        // Brush cursor overlay
+        this.brushCursor = new BrushCursor();
+
         // Point history for spline smoothing (stores last 4 points)
         this.pointHistory = [];
 
@@ -36,6 +44,26 @@ export class BrushTool extends Tool {
         this.brushStamp = null;
         this.stampColor = '#000000';
         this.updateBrushStamp();
+    }
+
+    activate() {
+        super.activate();
+        this.brushCursor.setVisible(true);
+        this.app.renderer.requestRender();
+    }
+
+    deactivate() {
+        super.deactivate();
+        this.brushCursor.setVisible(false);
+        this.app.renderer.requestRender();
+    }
+
+    /**
+     * Draw cursor overlay showing brush size.
+     */
+    drawOverlay(ctx, docToScreen) {
+        const zoom = this.app.renderer?.zoom || 1;
+        this.brushCursor.draw(ctx, docToScreen, zoom);
     }
 
     applyPreset(presetId) {
@@ -160,6 +188,12 @@ export class BrushTool extends Tool {
     }
 
     onMouseMove(e, x, y) {
+        // Always track cursor for overlay
+        this.cursorX = x;
+        this.cursorY = y;
+        this.brushCursor.update(x, y, this.size);
+        this.app.renderer.requestRender();
+
         if (!this.isDrawing) return;
 
         const layer = this.app.layerStack.getActiveLayer();

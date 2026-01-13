@@ -2,13 +2,14 @@
  * EraserTool - Erase to transparency.
  */
 import { Tool } from './Tool.js';
+import { BrushCursor } from '../utils/BrushCursor.js';
 
 export class EraserTool extends Tool {
     static id = 'eraser';
     static name = 'Eraser';
     static icon = 'eraser';
     static shortcut = 'e';
-    static cursor = 'crosshair';
+    static cursor = 'none';  // Hide default cursor, we draw our own
 
     constructor(app) {
         super(app);
@@ -17,6 +18,13 @@ export class EraserTool extends Tool {
         this.size = 20;
         this.hardness = 100;
         this.opacity = 100;
+
+        // Cursor position for overlay
+        this.cursorX = 0;
+        this.cursorY = 0;
+
+        // Brush cursor overlay
+        this.brushCursor = new BrushCursor();
 
         // State
         this.isErasing = false;
@@ -29,6 +37,23 @@ export class EraserTool extends Tool {
         // Eraser stamp cache
         this.eraserStamp = null;
         this.updateEraserStamp();
+    }
+
+    activate() {
+        super.activate();
+        this.brushCursor.setVisible(true);
+        this.app.renderer.requestRender();
+    }
+
+    deactivate() {
+        super.deactivate();
+        this.brushCursor.setVisible(false);
+        this.app.renderer.requestRender();
+    }
+
+    drawOverlay(ctx, docToScreen) {
+        const zoom = this.app.renderer?.zoom || 1;
+        this.brushCursor.draw(ctx, docToScreen, zoom);
     }
 
     updateEraserStamp() {
@@ -98,6 +123,12 @@ export class EraserTool extends Tool {
     }
 
     onMouseMove(e, x, y) {
+        // Always track cursor for overlay
+        this.cursorX = x;
+        this.cursorY = y;
+        this.brushCursor.update(x, y, this.size);
+        this.app.renderer.requestRender();
+
         if (!this.isErasing) return;
 
         const layer = this.app.layerStack.getActiveLayer();

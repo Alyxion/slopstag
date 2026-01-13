@@ -342,6 +342,34 @@ class PixelHelper:
 
         return tuple(img.mean(axis=(0, 1)))
 
+    def get_average_brightness(self, layer_id: str = None,
+                               region: Tuple[int, int, int, int] = None) -> float:
+        """
+        Compute average luminance/brightness of image.
+
+        Uses standard luminance formula: 0.299*R + 0.587*G + 0.114*B
+
+        Args:
+            layer_id: Layer ID, or None for composite
+            region: Optional (x, y, width, height) tuple
+
+        Returns:
+            Average brightness value 0-255
+        """
+        if region:
+            img = self.get_region_image_data(*region, layer_id=layer_id, as_numpy=True)
+        elif layer_id:
+            img = self.get_layer_image_data(layer_id, as_numpy=True)
+        else:
+            img = self.get_composite_image_data(as_numpy=True)
+
+        if img is None:
+            return 0.0
+
+        # Calculate luminance: 0.299*R + 0.587*G + 0.114*B
+        luminance = 0.299 * img[:, :, 0] + 0.587 * img[:, :, 1] + 0.114 * img[:, :, 2]
+        return float(np.mean(luminance))
+
     def count_pixels_with_color(self, color: Tuple[int, int, int, int],
                                 tolerance: int = 0, layer_id: str = None,
                                 region: Tuple[int, int, int, int] = None) -> int:

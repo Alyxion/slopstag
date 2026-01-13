@@ -2,13 +2,14 @@
  * SprayTool - Airbrush/spray paint effect with random particle distribution.
  */
 import { Tool } from './Tool.js';
+import { BrushCursor } from '../utils/BrushCursor.js';
 
 export class SprayTool extends Tool {
     static id = 'spray';
     static name = 'Spray';
     static icon = 'spray';
     static shortcut = 'a';
-    static cursor = 'crosshair';
+    static cursor = 'none';
 
     constructor(app) {
         super(app);
@@ -18,11 +19,32 @@ export class SprayTool extends Tool {
         this.density = 20;     // Particles per spray
         this.opacity = 100;    // Overall opacity
 
+        // Cursor overlay
+        this.brushCursor = new BrushCursor();
+
         // State
         this.isSpraying = false;
         this.sprayInterval = null;
         this.currentX = 0;
         this.currentY = 0;
+    }
+
+    activate() {
+        super.activate();
+        this.brushCursor.setVisible(true);
+        this.app.renderer.requestRender();
+    }
+
+    deactivate() {
+        super.deactivate();
+        this.brushCursor.setVisible(false);
+        this.stopSprayLoop();
+        this.app.renderer.requestRender();
+    }
+
+    drawOverlay(ctx, docToScreen) {
+        const zoom = this.app.renderer?.zoom || 1;
+        this.brushCursor.draw(ctx, docToScreen, zoom);
     }
 
     onMouseDown(e, x, y) {
@@ -44,6 +66,8 @@ export class SprayTool extends Tool {
     onMouseMove(e, x, y) {
         this.currentX = x;
         this.currentY = y;
+        this.brushCursor.update(x, y, this.size);
+        this.app.renderer.requestRender();
     }
 
     onMouseUp(e, x, y) {

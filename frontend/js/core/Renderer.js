@@ -20,6 +20,9 @@ export class Renderer {
         // Preview layer for tool overlays
         this.previewCanvas = null;
 
+        // Reference to app for tool overlays
+        this.app = null;
+
         // Settings
         this.backgroundColor = '#FFFFFF';
         this.showTransparencyGrid = true;
@@ -35,6 +38,14 @@ export class Renderer {
         this.needsRender = true;
         this.animationFrameId = null;
         this.startRenderLoop();
+    }
+
+    /**
+     * Set the app reference for tool overlay rendering.
+     * @param {Object} app - The app context
+     */
+    setApp(app) {
+        this.app = app;
     }
 
     /**
@@ -116,6 +127,24 @@ export class Renderer {
 
         // Draw bounding boxes for layers that extend outside the main canvas
         this.drawLayerBoundingBoxes(width, height);
+
+        // Draw tool overlays (e.g., clone stamp source indicator)
+        this.drawToolOverlay();
+    }
+
+    /**
+     * Draw the current tool's overlay if it has one.
+     */
+    drawToolOverlay() {
+        if (!this.app || !this.app.toolManager) return;
+
+        const currentTool = this.app.toolManager.currentTool;
+        if (!currentTool || !currentTool.drawOverlay) return;
+
+        // Create a docToScreen function for the tool to use
+        const docToScreen = (docX, docY) => this.canvasToScreen(docX, docY);
+
+        currentTool.drawOverlay(this.displayCtx, docToScreen);
     }
 
     /**
@@ -230,6 +259,14 @@ export class Renderer {
      */
     clearPreviewLayer() {
         this.previewCanvas = null;
+        this.requestRender();
+    }
+
+    /**
+     * Clear any tool overlay by requesting a re-render.
+     * (Tool overlays are drawn fresh each frame, so we just need to re-render)
+     */
+    clearOverlay() {
         this.requestRender();
     }
 

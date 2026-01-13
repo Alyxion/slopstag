@@ -800,8 +800,13 @@ body {
 }
 
 /* Status Bar */
-.status-coords, .status-size, .status-tool, .status-message {
+.status-coords, .status-size, .status-tool, .status-message, .status-hint {
     white-space: nowrap;
+}
+
+.status-hint {
+    color: #aaa;
+    font-style: italic;
 }
 
 .status-separator {
@@ -1500,10 +1505,26 @@ input[type="checkbox"] {
     align-items: center;
     gap: 6px;
     margin-top: 8px;
+    flex-wrap: wrap;
+}
+
+.nav-zoom-btn {
+    padding: 3px 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-primary);
+    font-size: 10px;
+    cursor: pointer;
+}
+
+.nav-zoom-btn:hover {
+    background: var(--bg-hover);
 }
 
 .navigator-zoom input[type="range"] {
     flex: 1;
+    min-width: 60px;
 }
 
 .zoom-input {

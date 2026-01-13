@@ -228,6 +228,13 @@ export class CropTool extends Tool {
         return [];
     }
 
+    getHint() {
+        if (this.cropRect) {
+            return 'Enter to apply crop, Escape to cancel';
+        }
+        return 'Drag to select crop area, Shift for square';
+    }
+
     // API execution
     executeAction(action, params) {
         if (action === 'crop') {

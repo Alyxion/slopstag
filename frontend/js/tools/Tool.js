@@ -102,4 +102,13 @@ export class Tool {
      * @param {*} value - New value
      */
     onPropertyChanged(id, value) {}
+
+    /**
+     * Get contextual hint for the tool.
+     * Override to provide tool-specific hints based on current state.
+     * @returns {string|null} Hint text or null if no hint
+     */
+    getHint() {
+        return null;
+    }
 }

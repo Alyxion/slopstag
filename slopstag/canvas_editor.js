@@ -232,6 +232,8 @@ export default {
                                 @mousemove="navigatorMouseMove"
                                 @mouseup="navigatorMouseUp"></canvas>
                             <div class="navigator-zoom">
+                                <button class="nav-zoom-btn" @click="setZoomPercent(100)" title="Reset to 100%">1:1</button>
+                                <button class="nav-zoom-btn" @click="fitToWindow" title="Fit to window">Fit</button>
                                 <input type="range" min="10" max="800" :value="Math.round(zoom * 100)"
                                     @input="setZoomPercent($event.target.value)">
                                 <input type="number" class="zoom-input" :value="Math.round(zoom * 100)"
@@ -358,8 +360,10 @@ export default {
                 <span class="status-size">{{ docWidth }} x {{ docHeight }}</span>
                 <span class="status-separator">|</span>
                 <span class="status-tool">{{ currentToolName }}</span>
-                <span class="status-separator">|</span>
-                <span class="status-message">{{ statusMessage }}</span>
+                <span v-if="toolHint" class="status-separator">|</span>
+                <span v-if="toolHint" class="status-hint">{{ toolHint }}</span>
+                <span v-if="statusMessage" class="status-separator">|</span>
+                <span v-if="statusMessage" class="status-message">{{ statusMessage }}</span>
                 <span class="status-right">
                     <span class="status-memory" :title="'History: ' + memoryUsedMB.toFixed(1) + '/' + memoryMaxMB + ' MB'">
                         <span class="memory-bar">
@@ -661,6 +665,7 @@ export default {
             activeGroupTools: {},  // groupId -> selected toolId
             currentToolId: 'brush',
             currentToolName: 'Brush',
+            toolHint: null,
             toolProperties: [],
             activeToolFlyout: null,
             toolFlyoutTimeout: null,
@@ -791,6 +796,14 @@ export default {
                 { Clipboard },
                 { ToolManager },
                 { BrushTool },
+                { PencilTool },
+                { CloneStampTool },
+                { SmudgeTool },
+                { BlurTool },
+                { SharpenTool },
+                { DodgeTool },
+                { BurnTool },
+                { SpongeTool },
                 { EraserTool },
                 { ShapeTool },
                 { FillTool },
@@ -821,6 +834,14 @@ export default {
                 import('/static/js/core/Clipboard.js'),
                 import('/static/js/tools/ToolManager.js'),
                 import('/static/js/tools/BrushTool.js'),
+                import('/static/js/tools/PencilTool.js'),
+                import('/static/js/tools/CloneStampTool.js'),
+                import('/static/js/tools/SmudgeTool.js'),
+                import('/static/js/tools/BlurTool.js'),
+                import('/static/js/tools/SharpenTool.js'),
+                import('/static/js/tools/DodgeTool.js'),
+                import('/static/js/tools/BurnTool.js'),
+                import('/static/js/tools/SpongeTool.js'),
                 import('/static/js/tools/EraserTool.js'),
                 import('/static/js/tools/ShapeTool.js'),
                 import('/static/js/tools/FillTool.js'),
@@ -875,6 +896,7 @@ export default {
             // Create initial empty layer stack (will be replaced when document is created)
             app.layerStack = new LayerStack(this.docWidth, this.docHeight, eventBus);
             app.renderer = new Renderer(canvas, app.layerStack);
+            app.renderer.setApp(app);  // Enable tool overlay rendering
             app.history = new History(app);
             app.clipboard = new Clipboard(app);
             app.toolManager = new ToolManager(app);
@@ -898,6 +920,14 @@ export default {
             app.toolManager.register(MagicWandTool);
             app.toolManager.register(MoveTool);
             app.toolManager.register(BrushTool);
+            app.toolManager.register(PencilTool);
+            app.toolManager.register(CloneStampTool);
+            app.toolManager.register(SmudgeTool);
+            app.toolManager.register(BlurTool);
+            app.toolManager.register(SharpenTool);
+            app.toolManager.register(DodgeTool);
+            app.toolManager.register(BurnTool);
+            app.toolManager.register(SpongeTool);
             app.toolManager.register(SprayTool);
             app.toolManager.register(EraserTool);
             app.toolManager.register(LineTool);
@@ -937,8 +967,12 @@ export default {
             app.toolManager.select('brush');
             this.currentToolId = 'brush';
             this.updateToolProperties();
-            app.renderer.fitToViewport();
-            this.zoom = app.renderer.zoom;
+
+            // Wait for layout to complete before fitting to viewport
+            this.$nextTick(() => {
+                // Use our improved fitToWindow method which properly fills the available space
+                this.fitToWindow();
+            });
 
             // Generate brush preset thumbnails on initial load (brush is default tool)
             this.generateBrushPresetThumbnails();
@@ -951,6 +985,7 @@ export default {
                 this.currentToolId = data.tool?.constructor.id || '';
                 this.currentToolName = data.tool?.constructor.name || '';
                 this.updateToolProperties();
+                this.updateToolHint();
                 // Only show layer bounds in move tool
                 app.renderer.showLayerBounds = (this.currentToolId === 'move');
                 app.renderer.requestRender();
@@ -1141,7 +1176,10 @@ export default {
                 { id: 'crop', name: 'Crop', shortcut: 'c', tools: ['crop'] },
                 { id: 'move', name: 'Move', shortcut: null, tools: ['move'] },
                 { id: 'hand', name: 'Hand', shortcut: 'h', tools: ['hand'] },
-                { id: 'brush', name: 'Brush', shortcut: 'b', tools: ['brush', 'spray'] },
+                { id: 'brush', name: 'Brush', shortcut: 'b', tools: ['brush', 'pencil', 'spray'] },
+                { id: 'stamp', name: 'Stamp', shortcut: 's', tools: ['clonestamp'] },
+                { id: 'retouch', name: 'Retouch', shortcut: null, tools: ['smudge', 'blur', 'sharpen'] },
+                { id: 'dodge', name: 'Dodge/Burn', shortcut: 'o', tools: ['dodge', 'burn', 'sponge'] },
                 { id: 'eraser', name: 'Eraser', shortcut: 'e', tools: ['eraser'] },
                 { id: 'pen', name: 'Pen', shortcut: 'p', tools: ['pen'] },
                 { id: 'shapes', name: 'Shapes', shortcut: 'u', tools: ['rect', 'circle', 'polygon', 'line', 'shape'] },
@@ -1566,14 +1604,36 @@ export default {
             const maxSize = 180;
             const scale = Math.min(maxSize / docWidth, maxSize / docHeight);
 
-            // Convert navigator coordinates to document coordinates
-            const docX = x / scale;
-            const docY = y / scale;
+            // Convert navigator coordinates to document coordinates (this is the clicked center point)
+            let docX = x / scale;
+            let docY = y / scale;
 
-            // Center the viewport on the clicked point
+            // Get viewport size in document coordinates
             const displayCanvas = this.$refs.mainCanvas;
             const viewW = displayCanvas.width / app.renderer.zoom;
             const viewH = displayCanvas.height / app.renderer.zoom;
+
+            // Clamp so the viewport edges stay within the document bounds
+            // The viewport left edge is at (docX - viewW/2), right edge at (docX + viewW/2)
+            // We want: left edge >= 0, right edge <= docWidth (with small tolerance)
+            const tolerance = 20; // Allow 20 pixels outside
+            const minCenterX = viewW / 2 - tolerance;
+            const maxCenterX = docWidth - viewW / 2 + tolerance;
+            const minCenterY = viewH / 2 - tolerance;
+            const maxCenterY = docHeight - viewH / 2 + tolerance;
+
+            // Handle case where viewport is larger than document
+            if (viewW >= docWidth + tolerance * 2) {
+                docX = docWidth / 2; // Center horizontally
+            } else {
+                docX = Math.max(minCenterX, Math.min(docX, maxCenterX));
+            }
+
+            if (viewH >= docHeight + tolerance * 2) {
+                docY = docHeight / 2; // Center vertically
+            } else {
+                docY = Math.max(minCenterY, Math.min(docY, maxCenterY));
+            }
 
             app.renderer.panX = -(docX - viewW / 2) * app.renderer.zoom;
             app.renderer.panY = -(docY - viewH / 2) * app.renderer.zoom;
@@ -1584,9 +1644,60 @@ export default {
         setZoomPercent(percent) {
             const app = this.getState();
             if (!app?.renderer) return;
-            const newZoom = parseInt(percent) / 100;
+            const newZoom = Math.max(0.1, Math.min(8, parseInt(percent) / 100));
             const canvas = this.$refs.mainCanvas;
             app.renderer.zoomAt(newZoom / app.renderer.zoom, canvas.width / 2, canvas.height / 2);
+            this.zoom = app.renderer.zoom;
+
+            // Update document state so zoom persists
+            const activeDoc = app.documentManager?.getActiveDocument();
+            if (activeDoc) {
+                activeDoc.zoom = app.renderer.zoom;
+                activeDoc.panX = app.renderer.panX;
+                activeDoc.panY = app.renderer.panY;
+            }
+
+            this.updateNavigator();
+        },
+
+        fitToWindow() {
+            const app = this.getState();
+            if (!app?.renderer) return;
+
+            // First ensure canvas size matches container
+            const canvas = this.$refs.mainCanvas;
+            const container = this.$refs.canvasContainer;
+
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+
+            // Calculate zoom to fit document in available space with small padding
+            const docWidth = app.renderer.compositeCanvas?.width || this.docWidth;
+            const docHeight = app.renderer.compositeCanvas?.height || this.docHeight;
+            const padding = 20; // Small padding around the document
+            const availableWidth = canvas.width - padding * 2;
+            const availableHeight = canvas.height - padding * 2;
+
+            const scaleX = availableWidth / docWidth;
+            const scaleY = availableHeight / docHeight;
+            const newZoom = Math.min(scaleX, scaleY);
+
+            // Apply the zoom (no cap at 1.0 - allow zooming in for small documents)
+            app.renderer.zoom = Math.max(0.01, newZoom); // Minimum zoom to prevent issues
+
+            // Center the document
+            app.renderer.panX = (canvas.width - docWidth * app.renderer.zoom) / 2;
+            app.renderer.panY = (canvas.height - docHeight * app.renderer.zoom) / 2;
+
+            // Also update the active document's stored zoom/pan so it doesn't get reset
+            const activeDoc = app.documentManager?.getActiveDocument();
+            if (activeDoc) {
+                activeDoc.zoom = app.renderer.zoom;
+                activeDoc.panX = app.renderer.panX;
+                activeDoc.panY = app.renderer.panY;
+            }
+
+            app.renderer.requestRender();
             this.zoom = app.renderer.zoom;
             this.updateNavigator();
         },
@@ -1613,6 +1724,16 @@ export default {
                     this.currentBrushPresetName = opt ? opt.label : presetProp.value;
                 }
             }
+        },
+
+        updateToolHint() {
+            const app = this.getState();
+            const tool = app?.toolManager?.currentTool;
+            if (!tool || !tool.getHint) {
+                this.toolHint = null;
+                return;
+            }
+            this.toolHint = tool.getHint();
         },
 
         updateLayerList() {
@@ -2429,11 +2550,8 @@ export default {
         },
 
         fitToView() {
-            const app = this.getState();
-            if (!app?.renderer) return;
-            app.renderer.fitToViewport();
-            this.zoom = app.renderer.zoom;
-            this.updateNavigator();
+            // Use the improved fitToWindow which properly fills the available space
+            this.fitToWindow();
         },
 
         // Menus
@@ -2580,6 +2698,7 @@ export default {
             }
 
             tool.onMouseDown(e, x, y);
+            this.updateToolHint();  // Update hint after tool state may change
         },
 
         handleMouseMove(e) {
@@ -2634,6 +2753,7 @@ export default {
             const { x, y } = app.renderer.screenToCanvas(screenX, screenY);
 
             app.toolManager.currentTool?.onMouseUp(e, x, y);
+            this.updateToolHint();  // Update hint after tool state may change
 
             // Final navigator update after action completes
             this.updateNavigator();
@@ -2795,8 +2915,7 @@ export default {
 
             app.history.clear();
             this.updateLayerList();
-            app.renderer.fitToViewport();
-            this.zoom = app.renderer.zoom;
+            this.fitToWindow();
         },
 
         undo() {
@@ -2846,8 +2965,7 @@ export default {
 
                 app.history.clear();
                 this.updateLayerList();
-                app.renderer.fitToViewport();
-                this.zoom = app.renderer.zoom;
+                this.fitToWindow();
                 this.statusMessage = 'Ready';
             } catch (e) {
                 console.error('Failed to load image:', e);

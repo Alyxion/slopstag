@@ -266,4 +266,11 @@ export class SelectionTool extends Tool {
     getProperties() {
         return [];
     }
+
+    getHint() {
+        if (this.selection) {
+            return 'Drag to create new selection, Shift for square';
+        }
+        return 'Drag to select, Shift for square';
+    }
 }

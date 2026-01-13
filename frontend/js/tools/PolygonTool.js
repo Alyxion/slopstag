@@ -279,6 +279,13 @@ export class PolygonTool extends Tool {
         }
     }
 
+    getHint() {
+        if (!this.isDrawing) {
+            return 'Click to start polygon, Alt+click for raster mode';
+        }
+        return `${this.points.length} points. Enter to finish, Backspace to remove last, Esc to cancel`;
+    }
+
     // API execution
     executeAction(action, params) {
         const layer = this.app.layerStack.getActiveLayer();

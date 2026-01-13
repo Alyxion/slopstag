@@ -141,6 +141,23 @@ class EditorTestHelper:
         actions.perform()
         return self
 
+    def alt_click_at_doc(self, doc_x: float, doc_y: float):
+        """Alt+click at document coordinates (used for clone stamp source, etc.)."""
+        screen_x, screen_y = self.doc_to_screen(doc_x, doc_y)
+        canvas = self.get_canvas_element()
+        canvas_rect = self.get_canvas_rect()
+
+        offset_x = screen_x - canvas_rect['x']
+        offset_y = screen_y - canvas_rect['y']
+
+        actions = ActionChains(self.driver)
+        actions.key_down(Keys.ALT)
+        actions.move_to_element_with_offset(canvas, offset_x, offset_y)
+        actions.click()
+        actions.key_up(Keys.ALT)
+        actions.perform()
+        return self
+
     def drag_at_doc(self, start_x: float, start_y: float, end_x: float, end_y: float,
                     steps: int = 10):
         """Drag from start to end in document coordinates."""

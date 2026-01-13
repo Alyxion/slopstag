@@ -323,6 +323,13 @@ export class PenTool extends Tool {
         ];
     }
 
+    getHint() {
+        if (!this.isDrawing) {
+            return 'Click to start path, drag for curves';
+        }
+        return 'Click to add points, Enter to finish, Ctrl+Enter to close, Esc to cancel';
+    }
+
     onPropertyChanged(id, value) {
         if (id === 'fill' || id === 'stroke') {
             this[id] = value;
