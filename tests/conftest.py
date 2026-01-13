@@ -263,3 +263,22 @@ def browser_helper(browser) -> BrowserHelper:
 def fresh_browser_helper(fresh_browser) -> BrowserHelper:
     """Create a BrowserHelper instance for a fresh browser."""
     return BrowserHelper(fresh_browser)
+
+
+# New unified test helpers
+@pytest.fixture
+def helpers(browser):
+    """Create unified TestHelpers instance for the session browser."""
+    from tests.helpers import TestHelpers
+    h = TestHelpers(browser)
+    h.editor.wait_for_editor()  # Ensure editor is ready
+    return h
+
+
+@pytest.fixture
+def fresh_helpers(fresh_browser):
+    """Create unified TestHelpers instance for a fresh browser (per-test)."""
+    from tests.helpers import TestHelpers
+    h = TestHelpers(fresh_browser)
+    h.editor.wait_for_editor()
+    return h
