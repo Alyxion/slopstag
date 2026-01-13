@@ -7,15 +7,41 @@ from typing import Generator
 
 import httpx
 import pytest
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.chrome.options import Options as ChromeOptions
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
 
 
 def run_server():
     """Run the NiceGUI server in a subprocess."""
-    import uvicorn
-    from slopstag.app import create_app
+    import sys
+    from pathlib import Path
 
-    app = create_app()
-    uvicorn.run(app, host="127.0.0.1", port=8081, log_level="warning")
+    sys.path.insert(0, "/projects/slopstag")
+
+    # Import and run main which sets up NiceGUI
+    from nicegui import ui, app
+    from slopstag.app import create_api_app
+    from slopstag.canvas_editor import CanvasEditor
+
+    # Mount the API
+    api_app = create_api_app()
+    app.mount("/api", api_app)
+
+    # Serve frontend static files
+    FRONTEND_DIR = Path("/projects/slopstag/frontend")
+    app.add_static_files("/static", FRONTEND_DIR)
+
+    @ui.page("/")
+    def index():
+        ui.add_head_html('<link rel="stylesheet" href="/static/css/main.css">')
+        CanvasEditor(width=800, height=600, api_base="/api").classes("w-full h-full")
+
+    ui.run(host="127.0.0.1", port=8081, reload=False, show=False)
 
 
 @pytest.fixture(scope="session")
@@ -87,3 +113,153 @@ def mock_session_state():
         ],
         active_layer_id="layer-1",
     )
+
+
+# Selenium browser fixtures for UI testing
+@pytest.fixture(scope="session")
+def chrome_options() -> ChromeOptions:
+    """Configure Chrome options for headless testing."""
+    options = ChromeOptions()
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1920,1080")
+    # Enable logging for debugging
+    options.set_capability("goog:loggingPrefs", {"browser": "ALL"})
+    return options
+
+
+@pytest.fixture(scope="session")
+def browser(server_process, chrome_options) -> Generator[webdriver.Chrome, None, None]:
+    """Create a Selenium WebDriver for browser testing.
+
+    This fixture starts a headless Chrome browser and navigates to the app.
+    """
+    service = ChromeService(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    driver.implicitly_wait(10)
+
+    # Navigate to the app
+    driver.get("http://127.0.0.1:8081")
+
+    # Wait for the editor to load
+    try:
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.CLASS_NAME, "editor-root"))
+        )
+    except Exception as e:
+        print(f"Editor failed to load: {e}")
+        print(f"Page source: {driver.page_source[:2000]}")
+        raise
+
+    yield driver
+
+    driver.quit()
+
+
+@pytest.fixture
+def fresh_browser(server_process, chrome_options) -> Generator[webdriver.Chrome, None, None]:
+    """Create a fresh browser instance for each test (not session-scoped)."""
+    service = ChromeService(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    driver.implicitly_wait(10)
+
+    driver.get("http://127.0.0.1:8081")
+
+    try:
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.CLASS_NAME, "editor-root"))
+        )
+    except Exception as e:
+        print(f"Editor failed to load: {e}")
+        raise
+
+    yield driver
+
+    driver.quit()
+
+
+class BrowserHelper:
+    """Helper class for common browser testing operations."""
+
+    def __init__(self, driver: webdriver.Chrome):
+        self.driver = driver
+        self.wait = WebDriverWait(driver, 10)
+
+    def get_browser_logs(self) -> list:
+        """Get browser console logs for debugging."""
+        return self.driver.get_log("browser")
+
+    def print_errors(self):
+        """Print any JavaScript errors from the browser console."""
+        logs = self.get_browser_logs()
+        errors = [log for log in logs if log["level"] in ("SEVERE", "WARNING")]
+        if errors:
+            print("\n=== Browser Console Errors ===")
+            for error in errors:
+                print(f"  [{error['level']}] {error['message']}")
+            print("==============================\n")
+        return errors
+
+    def find_by_css(self, selector: str, timeout: float = 10):
+        """Find element by CSS selector with wait."""
+        return self.wait.until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, selector))
+        )
+
+    def find_clickable(self, selector: str, timeout: float = 10):
+        """Find clickable element by CSS selector."""
+        return self.wait.until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
+        )
+
+    def click(self, selector: str):
+        """Click an element by CSS selector."""
+        element = self.find_clickable(selector)
+        element.click()
+        return element
+
+    def is_visible(self, selector: str) -> bool:
+        """Check if an element is visible."""
+        try:
+            element = self.driver.find_element(By.CSS_SELECTOR, selector)
+            return element.is_displayed()
+        except Exception:
+            return False
+
+    def wait_for_visible(self, selector: str, timeout: float = 10):
+        """Wait for element to become visible."""
+        return WebDriverWait(self.driver, timeout).until(
+            EC.visibility_of_element_located((By.CSS_SELECTOR, selector))
+        )
+
+    def wait_for_invisible(self, selector: str, timeout: float = 10):
+        """Wait for element to become invisible."""
+        return WebDriverWait(self.driver, timeout).until(
+            EC.invisibility_of_element_located((By.CSS_SELECTOR, selector))
+        )
+
+    def execute_js(self, script: str, *args):
+        """Execute JavaScript in the browser."""
+        return self.driver.execute_script(script, *args)
+
+    def get_vue_data(self, property_name: str):
+        """Get a property from the Vue component."""
+        return self.execute_js(f"""
+            const app = document.querySelector('.editor-root').__vue_app__;
+            const vm = app._instance?.proxy;
+            return vm?.{property_name};
+        """)
+
+
+@pytest.fixture
+def browser_helper(browser) -> BrowserHelper:
+    """Create a BrowserHelper instance for the session browser."""
+    return BrowserHelper(browser)
+
+
+@pytest.fixture
+def fresh_browser_helper(fresh_browser) -> BrowserHelper:
+    """Create a BrowserHelper instance for a fresh browser."""
+    return BrowserHelper(fresh_browser)

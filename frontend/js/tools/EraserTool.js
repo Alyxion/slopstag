@@ -23,6 +23,9 @@ export class EraserTool extends Tool {
         this.lastX = 0;
         this.lastY = 0;
 
+        // Point history for spline smoothing
+        this.pointHistory = [];
+
         // Eraser stamp cache
         this.eraserStamp = null;
         this.updateEraserStamp();
@@ -83,6 +86,9 @@ export class EraserTool extends Tool {
         this.lastX = x;
         this.lastY = y;
 
+        // Reset point history for spline smoothing
+        this.pointHistory = [{ x, y }];
+
         // Save state for undo - history system auto-detects changed region
         this.app.history.saveState('Eraser');
 
@@ -97,7 +103,24 @@ export class EraserTool extends Tool {
         const layer = this.app.layerStack.getActiveLayer();
         if (!layer || layer.locked) return;
 
-        this.eraseLine(layer, this.lastX, this.lastY, x, y);
+        // Add point to history
+        this.pointHistory.push({ x, y });
+
+        // Use spline interpolation for smooth curves
+        if (this.pointHistory.length >= 4) {
+            const p0 = this.pointHistory[this.pointHistory.length - 4];
+            const p1 = this.pointHistory[this.pointHistory.length - 3];
+            const p2 = this.pointHistory[this.pointHistory.length - 2];
+            const p3 = this.pointHistory[this.pointHistory.length - 1];
+
+            this.eraseCatmullRomSegment(layer, p0, p1, p2, p3);
+
+            if (this.pointHistory.length > 4) {
+                this.pointHistory = this.pointHistory.slice(-4);
+            }
+        } else if (this.pointHistory.length >= 2) {
+            this.eraseLine(layer, this.lastX, this.lastY, x, y);
+        }
 
         this.lastX = x;
         this.lastY = y;
@@ -106,7 +129,18 @@ export class EraserTool extends Tool {
 
     onMouseUp(e, x, y) {
         if (this.isErasing) {
+            // Flush remaining points
+            const layer = this.app.layerStack.getActiveLayer();
+            if (layer && this.pointHistory.length >= 2) {
+                const last = this.pointHistory[this.pointHistory.length - 1];
+                if (last.x !== x || last.y !== y) {
+                    this.eraseLine(layer, last.x, last.y, x, y);
+                    this.app.renderer.requestRender();
+                }
+            }
+
             this.isErasing = false;
+            this.pointHistory = [];
             // Finish history capture - auto-detects changed pixels
             this.app.history.finishState();
         }
@@ -115,6 +149,7 @@ export class EraserTool extends Tool {
     onMouseLeave(e) {
         if (this.isErasing) {
             this.isErasing = false;
+            this.pointHistory = [];
             // Finish history capture even if mouse leaves
             this.app.history.finishState();
         }
@@ -149,6 +184,45 @@ export class EraserTool extends Tool {
             const y = y1 + (y2 - y1) * t;
             this.eraseStamp(layer, x, y);
         }
+    }
+
+    /**
+     * Erase along a smooth Catmull-Rom spline segment between p1 and p2.
+     */
+    eraseCatmullRomSegment(layer, p0, p1, p2, p3) {
+        const chordLength = Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2);
+        const spacing = Math.max(1, this.size * 0.2);
+        const steps = Math.max(2, Math.ceil(chordLength / spacing));
+
+        for (let i = 0; i <= steps; i++) {
+            const t = i / steps;
+            const point = this.catmullRom(p0, p1, p2, p3, t);
+            this.eraseStamp(layer, point.x, point.y);
+        }
+    }
+
+    /**
+     * Catmull-Rom spline interpolation.
+     */
+    catmullRom(p0, p1, p2, p3, t) {
+        const t2 = t * t;
+        const t3 = t2 * t;
+
+        const x = 0.5 * (
+            (2 * p1.x) +
+            (-p0.x + p2.x) * t +
+            (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
+            (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3
+        );
+
+        const y = 0.5 * (
+            (2 * p1.y) +
+            (-p0.y + p2.y) * t +
+            (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
+            (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3
+        );
+
+        return { x, y };
     }
 
     onPropertyChanged(id, value) {

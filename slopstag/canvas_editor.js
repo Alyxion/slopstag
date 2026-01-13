@@ -70,10 +70,11 @@ export default {
 
                 <div class="ribbon-separator"></div>
 
+
                 <!-- Tool properties -->
-                <div class="ribbon-properties" v-if="toolProperties.length > 0">
-                    <div class="ribbon-prop" v-for="prop in toolProperties" :key="prop.id">
-                        <label>{{ prop.name }}</label>
+                <div class="ribbon-properties" v-if="toolProperties.length > 0" style="overflow: visible;">
+                    <div class="ribbon-prop" v-for="prop in toolProperties" :key="prop.id" :style="prop.id === 'preset' ? 'position: relative; overflow: visible;' : ''">
+                        <label v-if="prop.id !== 'preset'">{{ prop.name }}</label>
                         <template v-if="prop.type === 'range'">
                             <input
                                 type="range"
@@ -83,6 +84,26 @@ export default {
                                 :value="prop.value"
                                 @input="updateToolProperty(prop.id, $event.target.value)">
                             <span class="ribbon-value">{{ prop.value }}</span>
+                        </template>
+                        <template v-else-if="prop.type === 'select' && prop.id === 'preset'">
+                            <!-- Special brush preset dropdown with thumbnails -->
+                            <div class="brush-preset-dropdown" @click.stop.prevent="toggleBrushPresetMenu($event)">
+                                <img v-if="brushPresetThumbnails[prop.value]" :src="brushPresetThumbnails[prop.value]" class="dropdown-thumb">
+                                <span class="dropdown-arrow">&#9662;</span>
+                            </div>
+                            <div class="brush-preset-menu" v-if="showBrushPresetMenu" @click.stop>
+                                <div class="brush-preset-grid">
+                                    <div class="brush-preset-option"
+                                         v-for="opt in prop.options"
+                                         :key="opt.value"
+                                         :class="{ selected: opt.value === prop.value }"
+                                         @click="selectBrushPreset(opt.value)"
+                                         :title="opt.label">
+                                        <img :src="brushPresetThumbnails[opt.value]" class="preset-thumb">
+                                        <span v-if="!brushPresetThumbnails[opt.value]" class="preset-fallback">{{ opt.label }}</span>
+                                    </div>
+                                </div>
+                            </div>
                         </template>
                         <template v-else-if="prop.type === 'select'">
                             <select :value="prop.value" @change="updateToolProperty(prop.id, $event.target.value)">
@@ -171,14 +192,29 @@ export default {
                 <!-- Canvas container -->
                 <div class="canvas-container" ref="canvasContainer">
                     <canvas
+                        id="main-canvas"
                         ref="mainCanvas"
                         tabindex="0"
+                        :style="{ cursor: canvasCursor }"
                         @mousedown="handleMouseDown"
                         @mousemove="handleMouseMove"
                         @mouseup="handleMouseUp"
                         @mouseleave="handleMouseLeave"
+                        @mouseenter="handleMouseEnter"
                         @wheel.prevent="handleWheel"
                         @contextmenu.prevent
+                    ></canvas>
+                    <!-- Cursor overlay for large brush sizes (no browser limit) -->
+                    <canvas
+                        v-show="showCursorOverlay"
+                        ref="cursorOverlay"
+                        class="cursor-overlay"
+                        :style="{
+                            left: (cursorOverlayX - cursorOverlaySize/2) + 'px',
+                            top: (cursorOverlayY - cursorOverlaySize/2) + 'px',
+                            width: cursorOverlaySize + 'px',
+                            height: cursorOverlaySize + 'px'
+                        }"
                     ></canvas>
                 </div>
 
@@ -558,6 +594,15 @@ export default {
             docHeight: 600,
             zoom: 1.0,
 
+            // Canvas cursor
+            canvasCursor: 'crosshair',
+            // Overlay cursor for brush/eraser/spray (unified, no size limit)
+            showCursorOverlay: false,
+            cursorOverlayX: 0,
+            cursorOverlayY: 0,
+            cursorOverlaySize: 0,
+            mouseOverCanvas: false,  // Track if mouse is over canvas
+
             // Colors
             fgColor: '#000000',
             bgColor: '#FFFFFF',
@@ -620,6 +665,13 @@ export default {
             activeToolFlyout: null,
             toolFlyoutTimeout: null,
             flyoutCloseTimeout: null,
+
+            // Brush presets
+            brushPresetThumbnails: {},
+            brushPresetThumbnailsGenerated: false,
+            showBrushPresetMenu: false,
+            currentBrushPreset: 'hard-round-md',
+            currentBrushPresetName: 'Hard Round Medium',
 
             // History
             historyList: [],
@@ -689,6 +741,15 @@ export default {
             lastPanX: 0,
             lastPanY: 0,
         };
+    },
+
+    watch: {
+        zoom() {
+            // Update brush cursor when zoom changes
+            if (['brush', 'eraser', 'spray'].includes(this.currentToolId)) {
+                this.updateBrushCursor();
+            }
+        }
     },
 
     mounted() {
@@ -879,6 +940,12 @@ export default {
             app.renderer.fitToViewport();
             this.zoom = app.renderer.zoom;
 
+            // Generate brush preset thumbnails on initial load (brush is default tool)
+            this.generateBrushPresetThumbnails();
+
+            // Update cursor for initial tool
+            this.updateBrushCursor();
+
             // Set up event listeners
             eventBus.on('tool:changed', (data) => {
                 this.currentToolId = data.tool?.constructor.id || '';
@@ -887,6 +954,14 @@ export default {
                 // Only show layer bounds in move tool
                 app.renderer.showLayerBounds = (this.currentToolId === 'move');
                 app.renderer.requestRender();
+
+                // Generate brush preset thumbnails when brush tool is selected
+                if (this.currentToolId === 'brush' && !this.brushPresetThumbnailsGenerated) {
+                    this.generateBrushPresetThumbnails();
+                }
+
+                // Update cursor for the new tool
+                this.updateBrushCursor();
             });
 
             eventBus.on('layer:added', () => {
@@ -1528,6 +1603,16 @@ export default {
                 return;
             }
             this.toolProperties = tool.getProperties ? tool.getProperties() : [];
+
+            // Sync brush preset state
+            if (this.currentToolId === 'brush') {
+                const presetProp = this.toolProperties.find(p => p.id === 'preset');
+                if (presetProp) {
+                    this.currentBrushPreset = presetProp.value;
+                    const opt = presetProp.options.find(o => o.value === presetProp.value);
+                    this.currentBrushPresetName = opt ? opt.label : presetProp.value;
+                }
+            }
         },
 
         updateLayerList() {
@@ -1939,6 +2024,242 @@ export default {
                 tool.onPropertyChanged(propId, tool[propId]);
             }
             this.updateToolProperties();
+
+            // Track brush preset changes
+            if (propId === 'preset' && this.currentToolId === 'brush') {
+                this.currentBrushPreset = value;
+                const preset = this.toolProperties.find(p => p.id === 'preset');
+                if (preset) {
+                    const opt = preset.options.find(o => o.value === value);
+                    this.currentBrushPresetName = opt ? opt.label : value;
+                }
+            }
+
+            // Update cursor when size changes for brush/eraser/spray tools
+            if (propId === 'size' && ['brush', 'eraser', 'spray'].includes(this.currentToolId)) {
+                this.updateBrushCursor();
+            }
+        },
+
+        // Brush preset methods
+        generateBrushPresetThumbnails() {
+            if (this.brushPresetThumbnailsGenerated) return;
+
+            // Preset definitions (must match BrushPresets.js)
+            const presets = [
+                { id: 'hard-round-sm', size: 5, hardness: 100, opacity: 100, flow: 100 },
+                { id: 'hard-round-md', size: 20, hardness: 100, opacity: 100, flow: 100 },
+                { id: 'hard-round-lg', size: 50, hardness: 100, opacity: 100, flow: 100 },
+                { id: 'soft-round-sm', size: 10, hardness: 0, opacity: 100, flow: 100 },
+                { id: 'soft-round-md', size: 30, hardness: 0, opacity: 100, flow: 100 },
+                { id: 'soft-round-lg', size: 60, hardness: 0, opacity: 100, flow: 100 },
+                { id: 'airbrush', size: 40, hardness: 0, opacity: 50, flow: 30 },
+                { id: 'pencil', size: 2, hardness: 100, opacity: 100, flow: 100 },
+                { id: 'marker', size: 15, hardness: 80, opacity: 80, flow: 100 },
+                { id: 'chalk', size: 25, hardness: 50, opacity: 70, flow: 60 },
+            ];
+
+            const newThumbnails = { ...this.brushPresetThumbnails };
+            for (const preset of presets) {
+                try {
+                    newThumbnails[preset.id] = this.generatePresetThumbnail(preset);
+                } catch (e) {
+                    console.error('Error generating thumbnail for', preset.id, e);
+                }
+            }
+
+            // Replace with new object to trigger Vue reactivity
+            this.brushPresetThumbnails = newThumbnails;
+            this.brushPresetThumbnailsGenerated = true;
+        },
+
+        generatePresetThumbnail(preset) {
+            // Use 2x resolution for crisp rendering
+            const width = 64;
+            const height = 32;
+            const scale = 2;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width * scale;
+            canvas.height = height * scale;
+            const ctx = canvas.getContext('2d');
+            ctx.scale(scale, scale);
+
+            // Enable high-quality rendering
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+
+            // Dark background with subtle gradient
+            const bgGrad = ctx.createLinearGradient(0, 0, width, height);
+            bgGrad.addColorStop(0, '#1a1a1a');
+            bgGrad.addColorStop(1, '#242424');
+            ctx.fillStyle = bgGrad;
+            ctx.fillRect(0, 0, width, height);
+
+            // Calculate stroke width - scale down large brushes
+            const maxStrokeWidth = 10;
+            const minStrokeWidth = 1;
+            const strokeWidth = Math.max(minStrokeWidth, Math.min(maxStrokeWidth, preset.size * 0.2));
+
+            // Set up stroke style
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.lineWidth = strokeWidth;
+
+            // Calculate alpha from opacity and flow
+            const alpha = (preset.opacity / 100) * (preset.flow / 100);
+
+            // Draw bezier curve using native canvas bezierCurveTo for smooth anti-aliased strokes
+            ctx.beginPath();
+            ctx.moveTo(6, height * 0.65);
+            ctx.bezierCurveTo(
+                width * 0.3, height * 0.15,   // control point 1
+                width * 0.7, height * 0.85,   // control point 2
+                width - 6, height * 0.35      // end point
+            );
+
+            // Apply hardness via blur/shadow or gradient stroke
+            const hardness = preset.hardness / 100;
+
+            if (hardness < 0.5) {
+                // Soft brush - use shadow blur for soft edges
+                const blur = (1 - hardness) * strokeWidth * 0.8;
+                ctx.shadowColor = `rgba(255, 255, 255, ${alpha * 0.7})`;
+                ctx.shadowBlur = blur;
+                ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.5})`;
+                ctx.stroke();
+
+                // Draw core stroke
+                ctx.shadowBlur = blur * 0.3;
+                ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.8})`;
+                ctx.lineWidth = strokeWidth * 0.6;
+                ctx.stroke();
+            } else {
+                // Hard brush - solid stroke
+                ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+                ctx.stroke();
+            }
+
+            // Reset shadow
+            ctx.shadowBlur = 0;
+            ctx.shadowColor = 'transparent';
+
+            return canvas.toDataURL('image/png');
+        },
+
+        toggleBrushPresetMenu(event) {
+            if (event) {
+                event.stopPropagation();
+                event.preventDefault();
+            }
+            if (!this.brushPresetThumbnailsGenerated) {
+                this.generateBrushPresetThumbnails();
+            }
+            this.showBrushPresetMenu = !this.showBrushPresetMenu;
+        },
+
+        selectBrushPreset(presetId) {
+            this.updateToolProperty('preset', presetId);
+            this.showBrushPresetMenu = false;
+        },
+
+        // Brush cursor methods
+        updateBrushCursor() {
+            const app = this.getState();
+            const tool = app?.toolManager?.currentTool;
+
+            if (!tool) {
+                this.canvasCursor = 'default';
+                this.showCursorOverlay = false;
+                return;
+            }
+
+            const toolId = tool.constructor.id;
+
+            // Tools that should show a size-based circular cursor
+            if (toolId === 'brush' || toolId === 'eraser' || toolId === 'spray') {
+                const size = tool.size || 20;
+                const zoom = app?.renderer?.zoom || 1;
+                const scaledSize = Math.max(4, size * zoom);
+
+                // Always use overlay cursor (unified approach, no size limit)
+                this.canvasCursor = 'none';
+                this.cursorOverlaySize = Math.ceil(scaledSize) + 4;
+                this.drawCursorOverlay(scaledSize);
+
+                // Only show overlay if mouse is over canvas
+                this.showCursorOverlay = this.mouseOverCanvas;
+            } else {
+                // Use the tool's default cursor
+                this.showCursorOverlay = false;
+                this.canvasCursor = tool.constructor.cursor || 'crosshair';
+            }
+        },
+
+        drawCursorOverlay(scaledSize) {
+            // Draw the brush cursor on the overlay canvas
+            this.$nextTick(() => {
+                const canvas = this.$refs.cursorOverlay;
+                if (!canvas) return;
+
+                const canvasSize = Math.ceil(scaledSize) + 4;
+                canvas.width = canvasSize;
+                canvas.height = canvasSize;
+
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvasSize, canvasSize);
+
+                const center = canvasSize / 2;
+                const radius = scaledSize / 2;
+
+                // Draw outer circle (dark outline)
+                ctx.beginPath();
+                ctx.arc(center, center, radius, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                // Draw inner circle (light outline)
+                ctx.beginPath();
+                ctx.arc(center, center, radius - 1, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // Draw center crosshair
+                const crossSize = Math.min(8, scaledSize / 4);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(center - crossSize, center);
+                ctx.lineTo(center + crossSize, center);
+                ctx.moveTo(center, center - crossSize);
+                ctx.lineTo(center, center + crossSize);
+                ctx.stroke();
+
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
+                ctx.lineWidth = 0.5;
+                ctx.stroke();
+            });
+        },
+
+        updateCursorOverlayPosition(clientX, clientY) {
+            // Update overlay position relative to canvas container
+            const container = this.$refs.canvasContainer;
+            if (!container) return;
+
+            const rect = container.getBoundingClientRect();
+            this.cursorOverlayX = clientX - rect.left;
+            this.cursorOverlayY = clientY - rect.top;
+        },
+
+        getPresetLabel(presetId) {
+            const preset = this.toolProperties.find(p => p.id === 'preset');
+            if (preset) {
+                const opt = preset.options.find(o => o.value === presetId);
+                return opt ? opt.label : presetId;
+            }
+            return presetId;
         },
 
         // Color
@@ -2140,9 +2461,27 @@ export default {
             this.activeMenu = this.activeMenu === menu ? null : menu;
         },
 
-        closeMenu() {
+        closeMenu(event) {
+            // Don't close menus if clicking inside them
+            if (event && event.target) {
+                // Check if click is inside brush preset dropdown or menu
+                const brushDropdown = event.target.closest('.brush-preset-dropdown');
+                const brushMenu = event.target.closest('.brush-preset-menu');
+                if (brushDropdown || brushMenu) {
+                    return; // Don't close, let the specific handler manage it
+                }
+
+                // Check if click is inside other menus
+                const menuBar = event.target.closest('.menu-bar');
+                const colorPicker = event.target.closest('.color-picker-popup');
+                if (menuBar || colorPicker) {
+                    return;
+                }
+            }
+
             this.activeMenu = null;
             this.colorPickerVisible = false;
+            this.showBrushPresetMenu = false;
         },
 
         async menuAction(action, data) {
@@ -2252,6 +2591,11 @@ export default {
             const screenY = e.clientY - rect.top;
             const { x, y } = app.renderer.screenToCanvas(screenX, screenY);
 
+            // Update cursor overlay position if active
+            if (this.showCursorOverlay) {
+                this.updateCursorOverlayPosition(e.clientX, e.clientY);
+            }
+
             // Update status bar coordinates
             this.coordsX = Math.round(x);
             this.coordsY = Math.round(y);
@@ -2297,8 +2641,17 @@ export default {
 
         handleMouseLeave(e) {
             this.isPanning = false;
+            this.mouseOverCanvas = false;
+            this.showCursorOverlay = false;
             const app = this.getState();
             app?.toolManager?.currentTool?.onMouseLeave(e);
+        },
+
+        handleMouseEnter(e) {
+            this.mouseOverCanvas = true;
+            // Update cursor overlay position first, then show it
+            this.updateCursorOverlayPosition(e.clientX, e.clientY);
+            this.updateBrushCursor();
         },
 
         handleWheel(e) {
@@ -2382,6 +2735,7 @@ export default {
                 }
                 // Delete to clear selection
                 if (e.key === 'Delete' || e.key === 'Backspace') {
+                    e.preventDefault();
                     this.deleteSelection();
                     return;
                 }
@@ -2610,6 +2964,14 @@ export default {
                     Math.ceil(selection.width),
                     Math.ceil(selection.height)
                 );
+
+                // Trim layer to remaining content if significant portion was deleted
+                const deletedArea = selection.width * selection.height;
+                const layerArea = layer.width * layer.height;
+                if (deletedArea > layerArea * 0.2) {
+                    layer.trimToContent();
+                }
+
                 app.history.finishState();
                 app.renderer.requestRender();
             }

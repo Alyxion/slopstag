@@ -21,6 +21,20 @@
     padding: 0;
 }
 
+/* Prevent browser selection highlighting */
+*::selection {
+    background: transparent;
+}
+
+*::-moz-selection {
+    background: transparent;
+}
+
+/* Prevent focus outlines on non-input elements */
+*:focus:not(input):not(textarea):not(select) {
+    outline: none;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: 13px;
@@ -201,6 +215,13 @@ body {
     width: 100%;
     height: 100%;
     outline: none;
+    /* cursor is set via Vue inline style */
+}
+
+.cursor-overlay {
+    position: absolute;
+    pointer-events: none;
+    z-index: 1000;
 }
 
 .right-panel {
@@ -1105,7 +1126,7 @@ input[type="checkbox"] {
 
 /* ===== Ribbon Bar ===== */
 .ribbon-bar {
-    height: 36px;
+    height: 52px;
     background-color: var(--bg-panel);
     border-bottom: 1px solid var(--border);
     display: flex;
@@ -1113,6 +1134,7 @@ input[type="checkbox"] {
     padding: 0 12px;
     gap: 12px;
     flex-shrink: 0;
+    overflow: visible; /* Allow dropdown menus to overflow */
 }
 
 .ribbon-tool-name {
@@ -1227,7 +1249,7 @@ input[type="checkbox"] {
     align-items: center;
     gap: 16px;
     flex: 1;
-    overflow-x: auto;
+    overflow: visible; /* Allow dropdowns to overflow */
 }
 
 .ribbon-prop {
@@ -1269,6 +1291,107 @@ input[type="checkbox"] {
     color: var(--text-secondary);
     min-width: 30px;
     text-align: right;
+}
+
+/* Brush preset thumbnail display in ribbon */
+.brush-preset-display {
+    display: flex;
+    align-items: center;
+}
+
+.brush-preset-thumb {
+    height: 36px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+}
+
+/* Brush preset dropdown */
+.brush-preset-dropdown {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 6px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.brush-preset-dropdown:hover {
+    background: var(--bg-hover);
+}
+
+.brush-preset-dropdown .dropdown-thumb {
+    height: 24px;
+    border-radius: 2px;
+}
+
+.brush-preset-dropdown .dropdown-arrow {
+    font-size: 8px;
+    color: var(--text-secondary);
+    margin-left: 2px;
+}
+
+/* Brush preset menu */
+.brush-preset-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    padding: 8px;
+    z-index: 10000;
+}
+
+/* Grid layout for presets */
+.brush-preset-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+}
+
+.brush-preset-option {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.1s;
+    border: 2px solid transparent;
+    min-width: 64px;
+    min-height: 32px;
+    background: var(--bg-input);
+}
+
+.brush-preset-option:hover {
+    background: var(--bg-hover);
+}
+
+.brush-preset-option.selected {
+    border-color: var(--accent);
+    background: rgba(var(--accent-rgb), 0.2);
+}
+
+.brush-preset-option .preset-thumb {
+    width: 64px;
+    height: 32px;
+    border-radius: 3px;
+    object-fit: contain;
+}
+
+.brush-preset-option .preset-fallback {
+    font-size: 9px;
+    color: var(--text-secondary);
+    text-align: center;
+    padding: 4px;
+}
+
+/* Position the dropdown container for relative positioning of menu */
+.ribbon-prop {
+    position: relative;
 }
 
 .ribbon-history {

@@ -107,9 +107,10 @@ export class Clipboard {
     /**
      * Cut the current selection (copy + clear).
      * @param {Object} selection - Selection rect {x, y, width, height}
+     * @param {boolean} trimLayer - Whether to trim the layer to content bounds after cut
      * @returns {boolean} Success
      */
-    cut(selection = null) {
+    cut(selection = null, trimLayer = true) {
         if (!this.copy(selection)) return false;
 
         const layer = this.app.layerStack.getActiveLayer();
@@ -125,6 +126,16 @@ export class Clipboard {
                 Math.ceil(selection.width),
                 Math.ceil(selection.height)
             );
+
+            // Trim layer to remaining content if significant portion was cut
+            if (trimLayer) {
+                const cutArea = selection.width * selection.height;
+                const layerArea = layer.width * layer.height;
+                // Trim if cut area was more than 20% of layer
+                if (cutArea > layerArea * 0.2) {
+                    layer.trimToContent();
+                }
+            }
         } else {
             // Clear entire layer
             layer.ctx.clearRect(0, 0, layer.width, layer.height);
@@ -150,22 +161,31 @@ export class Clipboard {
 
         let targetLayer;
         if (asNewLayer) {
-            targetLayer = this.app.layerStack.addLayer({ name: 'Pasted' });
+            // Create a layer sized to the pasted content, not full document size
+            targetLayer = this.app.layerStack.addLayer({
+                name: 'Pasted',
+                width: this.buffer.width,
+                height: this.buffer.height,
+                offsetX: x,
+                offsetY: y
+            });
+
+            // Draw image data at (0,0) since the layer offset handles positioning
+            targetLayer.ctx.putImageData(this.buffer.imageData, 0, 0);
         } else {
             targetLayer = this.app.layerStack.getActiveLayer();
+            if (!targetLayer) return false;
+
+            // Create temp canvas to hold image data
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = this.buffer.width;
+            tempCanvas.height = this.buffer.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.putImageData(this.buffer.imageData, 0, 0);
+
+            // Draw to target layer at position
+            targetLayer.ctx.drawImage(tempCanvas, x, y);
         }
-
-        if (!targetLayer) return false;
-
-        // Create temp canvas to hold image data
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = this.buffer.width;
-        tempCanvas.height = this.buffer.height;
-        const tempCtx = tempCanvas.getContext('2d');
-        tempCtx.putImageData(this.buffer.imageData, 0, 0);
-
-        // Draw to target layer at position
-        targetLayer.ctx.drawImage(tempCanvas, x, y);
 
         this.app.history.finishState();
         this.app.renderer.requestRender();
