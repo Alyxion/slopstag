@@ -2955,25 +2955,39 @@ export default {
             }
 
             // Handle pixel layer - delete selection area
+            // Selection is in document coordinates, need to convert to layer canvas coords
             const selection = this.getSelection();
             if (selection && selection.width > 0 && selection.height > 0) {
-                app.history.saveState('Delete Selection');
-                layer.ctx.clearRect(
-                    Math.floor(selection.x),
-                    Math.floor(selection.y),
-                    Math.ceil(selection.width),
-                    Math.ceil(selection.height)
-                );
+                // Convert document coords to layer canvas coords
+                const localCoords = layer.docToCanvas(selection.x, selection.y);
+                let canvasX = Math.floor(localCoords.x);
+                let canvasY = Math.floor(localCoords.y);
+                let width = Math.ceil(selection.width);
+                let height = Math.ceil(selection.height);
 
-                // Trim layer to remaining content if significant portion was deleted
-                const deletedArea = selection.width * selection.height;
-                const layerArea = layer.width * layer.height;
-                if (deletedArea > layerArea * 0.2) {
-                    layer.trimToContent();
+                // Clamp to layer bounds
+                const clampedLeft = Math.max(0, canvasX);
+                const clampedTop = Math.max(0, canvasY);
+                const clampedRight = Math.min(layer.width, canvasX + width);
+                const clampedBottom = Math.min(layer.height, canvasY + height);
+
+                width = clampedRight - clampedLeft;
+                height = clampedBottom - clampedTop;
+
+                if (width > 0 && height > 0) {
+                    app.history.saveState('Delete Selection');
+                    layer.ctx.clearRect(clampedLeft, clampedTop, width, height);
+
+                    // Trim layer to remaining content if significant portion was deleted
+                    const deletedArea = width * height;
+                    const layerArea = layer.width * layer.height;
+                    if (deletedArea > layerArea * 0.2) {
+                        layer.trimToContent();
+                    }
+
+                    app.history.finishState();
+                    app.renderer.requestRender();
                 }
-
-                app.history.finishState();
-                app.renderer.requestRender();
             }
         },
 

@@ -38,15 +38,14 @@ export class LassoTool extends Tool {
     }
 
     onMouseDown(e, x, y) {
-        const layer = this.app.layerStack.getActiveLayer();
-        if (!layer) return;
-
         this.isDrawing = true;
         this.points = [[x, y]];
 
-        // Set up preview canvas
-        this.previewCanvas.width = layer.width;
-        this.previewCanvas.height = layer.height;
+        // Set up preview canvas to document dimensions, not layer dimensions
+        const docWidth = this.app.layerStack.width;
+        const docHeight = this.app.layerStack.height;
+        this.previewCanvas.width = docWidth;
+        this.previewCanvas.height = docHeight;
 
         this.drawPreview();
     }
@@ -136,16 +135,30 @@ export class LassoTool extends Tool {
             maxY = Math.max(maxY, y);
         }
 
+        // Clamp to document bounds
+        const docWidth = this.app.layerStack.width;
+        const docHeight = this.app.layerStack.height;
+        minX = Math.max(0, Math.floor(minX));
+        minY = Math.max(0, Math.floor(minY));
+        maxX = Math.min(docWidth, Math.ceil(maxX));
+        maxY = Math.min(docHeight, Math.ceil(maxY));
+
         const bounds = {
-            x: Math.floor(minX),
-            y: Math.floor(minY),
-            width: Math.ceil(maxX - minX),
-            height: Math.ceil(maxY - minY)
+            x: minX,
+            y: minY,
+            width: maxX - minX,
+            height: maxY - minY
         };
+
+        // Only create selection if it has area after clamping
+        if (bounds.width <= 0 || bounds.height <= 0) {
+            this.clearSelection();
+            return;
+        }
 
         // Set selection via selection tool
         const selectionTool = this.app.toolManager.tools.get('selection');
-        if (selectionTool && bounds.width > 0 && bounds.height > 0) {
+        if (selectionTool) {
             selectionTool.setSelection(bounds);
         }
 

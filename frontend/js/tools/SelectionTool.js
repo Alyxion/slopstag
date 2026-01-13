@@ -42,18 +42,18 @@ export class SelectionTool extends Tool {
     }
 
     onMouseDown(e, x, y) {
-        // Start new selection
+        // Start new selection - allow starting anywhere in document space
         this.isSelecting = true;
         this.startX = Math.round(x);
         this.startY = Math.round(y);
         this.endX = this.startX;
         this.endY = this.startY;
 
-        const layer = this.app.layerStack.getActiveLayer();
-        if (layer) {
-            this.previewCanvas.width = layer.width;
-            this.previewCanvas.height = layer.height;
-        }
+        // Size preview canvas to document dimensions, not layer dimensions
+        const docWidth = this.app.layerStack.width;
+        const docHeight = this.app.layerStack.height;
+        this.previewCanvas.width = docWidth;
+        this.previewCanvas.height = docHeight;
     }
 
     onMouseMove(e, x, y) {
@@ -79,10 +79,15 @@ export class SelectionTool extends Tool {
         this.isSelecting = false;
 
         // Finalize selection
-        const rect = this.normalizeRect(this.startX, this.startY, this.endX, this.endY);
+        let rect = this.normalizeRect(this.startX, this.startY, this.endX, this.endY);
 
-        // Only create selection if it has size
-        if (rect.width > 1 && rect.height > 1) {
+        // Clamp selection to document bounds
+        const docWidth = this.app.layerStack.width;
+        const docHeight = this.app.layerStack.height;
+        rect = this.clampRectToDocument(rect, docWidth, docHeight);
+
+        // Only create selection if it has size after clamping
+        if (rect && rect.width > 1 && rect.height > 1) {
             this.selection = rect;
             this.app.eventBus.emit('selection:changed', { selection: this.selection });
         } else {
@@ -105,17 +110,22 @@ export class SelectionTool extends Tool {
     }
 
     selectAll() {
-        const layer = this.app.layerStack.getActiveLayer();
-        if (layer) {
-            this.selection = {
-                x: 0,
-                y: 0,
-                width: layer.width,
-                height: layer.height
-            };
-            this.app.eventBus.emit('selection:changed', { selection: this.selection });
-            this.drawSelectionPreview();
-        }
+        // Select the entire document area
+        const docWidth = this.app.layerStack.width;
+        const docHeight = this.app.layerStack.height;
+        this.selection = {
+            x: 0,
+            y: 0,
+            width: docWidth,
+            height: docHeight
+        };
+
+        // Resize preview canvas if needed
+        this.previewCanvas.width = docWidth;
+        this.previewCanvas.height = docHeight;
+
+        this.app.eventBus.emit('selection:changed', { selection: this.selection });
+        this.drawSelectionPreview();
     }
 
     clearSelection() {
@@ -130,6 +140,30 @@ export class SelectionTool extends Tool {
             y: Math.min(y1, y2),
             width: Math.abs(x2 - x1),
             height: Math.abs(y2 - y1)
+        };
+    }
+
+    /**
+     * Clamp a rectangle to document bounds.
+     * Returns null if the rect is entirely outside the document.
+     */
+    clampRectToDocument(rect, docWidth, docHeight) {
+        // Calculate clamped bounds
+        const left = Math.max(0, rect.x);
+        const top = Math.max(0, rect.y);
+        const right = Math.min(docWidth, rect.x + rect.width);
+        const bottom = Math.min(docHeight, rect.y + rect.height);
+
+        // Check if there's any overlap with document
+        if (right <= left || bottom <= top) {
+            return null;
+        }
+
+        return {
+            x: left,
+            y: top,
+            width: right - left,
+            height: bottom - top
         };
     }
 

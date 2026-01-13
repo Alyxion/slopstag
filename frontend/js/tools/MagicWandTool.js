@@ -25,8 +25,21 @@ export class MagicWandTool extends Tool {
         const layer = this.app.layerStack.getActiveLayer();
         if (!layer) return;
 
-        const intX = Math.floor(x);
-        const intY = Math.floor(y);
+        // Convert document coordinates to layer canvas coordinates
+        let canvasX = x, canvasY = y;
+        if (layer.docToCanvas) {
+            const canvasCoords = layer.docToCanvas(x, y);
+            canvasX = canvasCoords.x;
+            canvasY = canvasCoords.y;
+        }
+
+        const intX = Math.floor(canvasX);
+        const intY = Math.floor(canvasY);
+
+        // Check if click is within layer bounds
+        if (intX < 0 || intX >= layer.width || intY < 0 || intY >= layer.height) {
+            return; // Click is outside the layer
+        }
 
         // Get image data
         const imageData = layer.ctx.getImageData(0, 0, layer.width, layer.height);
@@ -36,10 +49,19 @@ export class MagicWandTool extends Tool {
             ? this.floodSelect(imageData, intX, intY)
             : this.globalSelect(imageData, intX, intY);
 
-        // Convert to selection rect (bounding box)
-        const bounds = this.getSelectionBounds(selection, layer.width, layer.height);
+        // Convert to selection rect (bounding box) in layer canvas coords
+        const layerBounds = this.getSelectionBounds(selection, layer.width, layer.height);
 
-        if (bounds) {
+        if (layerBounds) {
+            // Convert layer canvas bounds to document coordinates
+            const docTopLeft = layer.canvasToDoc(layerBounds.x, layerBounds.y);
+            const bounds = {
+                x: docTopLeft.x,
+                y: docTopLeft.y,
+                width: layerBounds.width,
+                height: layerBounds.height
+            };
+
             // Get selection tool and set the selection
             const selectionTool = this.app.toolManager.tools.get('selection');
             if (selectionTool) {

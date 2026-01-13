@@ -9,37 +9,65 @@ export class Clipboard {
 
     /**
      * Copy the current selection or entire layer to clipboard.
-     * @param {Object} selection - Optional selection rect {x, y, width, height}
+     * Selection coordinates are in document space and need to be converted
+     * to layer canvas coordinates using the layer's offset.
+     * @param {Object} selection - Optional selection rect {x, y, width, height} in document coords
      * @returns {boolean} Success
      */
     copy(selection = null) {
         const layer = this.app.layerStack.getActiveLayer();
         if (!layer) return false;
 
-        let x, y, width, height;
+        let docX, docY, width, height;
+        let canvasX, canvasY;
 
         if (selection && selection.width > 0 && selection.height > 0) {
-            x = Math.max(0, Math.floor(selection.x));
-            y = Math.max(0, Math.floor(selection.y));
-            width = Math.min(selection.width, layer.width - x);
-            height = Math.min(selection.height, layer.height - y);
+            // Selection is in document coordinates
+            docX = Math.floor(selection.x);
+            docY = Math.floor(selection.y);
+            width = Math.ceil(selection.width);
+            height = Math.ceil(selection.height);
+
+            // Convert document coords to layer canvas coords
+            const localCoords = layer.docToCanvas(docX, docY);
+            canvasX = localCoords.x;
+            canvasY = localCoords.y;
+
+            // Clamp to layer bounds
+            const clampedLeft = Math.max(0, canvasX);
+            const clampedTop = Math.max(0, canvasY);
+            const clampedRight = Math.min(layer.width, canvasX + width);
+            const clampedBottom = Math.min(layer.height, canvasY + height);
+
+            // Adjust for clamping
+            width = clampedRight - clampedLeft;
+            height = clampedBottom - clampedTop;
+            canvasX = clampedLeft;
+            canvasY = clampedTop;
+
+            // Recalculate document position for the clamped region
+            const clampedDoc = layer.canvasToDoc(canvasX, canvasY);
+            docX = clampedDoc.x;
+            docY = clampedDoc.y;
         } else {
-            // Copy entire layer
-            x = 0;
-            y = 0;
+            // Copy entire layer - use layer's full canvas
+            canvasX = 0;
+            canvasY = 0;
             width = layer.width;
             height = layer.height;
+            docX = layer.offsetX;
+            docY = layer.offsetY;
         }
 
         if (width <= 0 || height <= 0) return false;
 
-        const imageData = layer.ctx.getImageData(x, y, width, height);
+        const imageData = layer.ctx.getImageData(canvasX, canvasY, width, height);
         this.buffer = {
             imageData,
             width,
             height,
-            sourceX: x,
-            sourceY: y
+            sourceX: docX,  // Store document coordinates for paste-in-place
+            sourceY: docY
         };
 
         this.app.eventBus.emit('clipboard:copy', { width, height });
@@ -106,7 +134,8 @@ export class Clipboard {
 
     /**
      * Cut the current selection (copy + clear).
-     * @param {Object} selection - Selection rect {x, y, width, height}
+     * Selection coordinates are in document space.
+     * @param {Object} selection - Selection rect {x, y, width, height} in document coords
      * @param {boolean} trimLayer - Whether to trim the layer to content bounds after cut
      * @returns {boolean} Success
      */
@@ -119,21 +148,34 @@ export class Clipboard {
         this.app.history.saveState('Cut');
 
         if (selection && selection.width > 0 && selection.height > 0) {
-            // Clear selection area
-            layer.ctx.clearRect(
-                Math.floor(selection.x),
-                Math.floor(selection.y),
-                Math.ceil(selection.width),
-                Math.ceil(selection.height)
-            );
+            // Convert document coords to layer canvas coords
+            const localCoords = layer.docToCanvas(selection.x, selection.y);
+            let canvasX = Math.floor(localCoords.x);
+            let canvasY = Math.floor(localCoords.y);
+            let width = Math.ceil(selection.width);
+            let height = Math.ceil(selection.height);
 
-            // Trim layer to remaining content if significant portion was cut
-            if (trimLayer) {
-                const cutArea = selection.width * selection.height;
-                const layerArea = layer.width * layer.height;
-                // Trim if cut area was more than 20% of layer
-                if (cutArea > layerArea * 0.2) {
-                    layer.trimToContent();
+            // Clamp to layer bounds
+            const clampedLeft = Math.max(0, canvasX);
+            const clampedTop = Math.max(0, canvasY);
+            const clampedRight = Math.min(layer.width, canvasX + width);
+            const clampedBottom = Math.min(layer.height, canvasY + height);
+
+            width = clampedRight - clampedLeft;
+            height = clampedBottom - clampedTop;
+
+            if (width > 0 && height > 0) {
+                // Clear selection area in layer canvas coordinates
+                layer.ctx.clearRect(clampedLeft, clampedTop, width, height);
+
+                // Trim layer to remaining content if significant portion was cut
+                if (trimLayer) {
+                    const cutArea = width * height;
+                    const layerArea = layer.width * layer.height;
+                    // Trim if cut area was more than 20% of layer
+                    if (cutArea > layerArea * 0.2) {
+                        layer.trimToContent();
+                    }
                 }
             }
         } else {
