@@ -10,9 +10,234 @@ const editorState = new WeakMap();
 
 export default {
     template: `
-        <div class="editor-root" ref="root">
-            <!-- Top toolbar -->
-            <div class="toolbar-container">
+        <div class="editor-root" ref="root" :data-theme="currentTheme" :data-mode="currentUIMode">
+
+            <!-- ==================== TABLET MODE UI ==================== -->
+            <template v-if="currentUIMode === 'tablet'">
+                <!-- Tablet Top Bar -->
+                <div class="tablet-top-bar">
+                    <div class="tablet-action-group">
+                        <button class="tablet-menu-btn" @click="tabletLeftDrawerOpen = !tabletLeftDrawerOpen"
+                            :class="{ active: tabletLeftDrawerOpen }" title="Tools">
+                            <span v-html="getToolIcon('tools')"></span>
+                        </button>
+                        <button class="tablet-menu-btn" @click="showTabletMenu" title="Menu">
+                            <span v-html="getToolIcon('menu')"></span>
+                        </button>
+                    </div>
+                    <div class="tablet-action-group">
+                        <button class="tablet-menu-btn" @click="undo" :disabled="!canUndo" title="Undo">
+                            <span v-html="getToolIcon('undo')"></span>
+                        </button>
+                        <button class="tablet-menu-btn" @click="redo" :disabled="!canRedo" title="Redo">
+                            <span v-html="getToolIcon('redo')"></span>
+                        </button>
+                    </div>
+                    <span class="tablet-title">{{ documentTabs.find(d => d.isActive)?.name || 'Slopstag' }}</span>
+                    <div class="tablet-action-group">
+                        <button class="tablet-menu-btn" @click="showTabletZoomMenu" title="Zoom: {{ Math.round(zoom * 100) }}%">
+                            <span style="font-size: 14px; font-weight: 600;">{{ Math.round(zoom * 100) }}%</span>
+                        </button>
+                    </div>
+                    <div class="tablet-action-group">
+                        <button class="tablet-menu-btn" @click="tabletRightDrawerOpen = !tabletRightDrawerOpen"
+                            :class="{ active: tabletRightDrawerOpen }" title="Panels">
+                            <span v-html="getToolIcon('panels')"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Left Drawer - Tools -->
+                <div class="tablet-drawer left" :class="{ open: tabletLeftDrawerOpen }">
+                    <div class="tablet-drawer-header">
+                        <span class="tablet-drawer-title">Tools</span>
+                        <button class="tablet-panel-close" @click="tabletLeftDrawerOpen = false">&times;</button>
+                    </div>
+                    <div class="tablet-drawer-content">
+                        <div class="tablet-tool-grid">
+                            <button v-for="tool in tabletAllTools" :key="tool.id"
+                                class="tablet-tool-btn-large"
+                                :class="{ active: currentToolId === tool.id }"
+                                :title="tool.name"
+                                @click="selectTool(tool.id)">
+                                <span class="tablet-tool-icon" v-html="getToolIcon(tool.icon)"></span>
+                                <span class="tablet-tool-label">{{ tool.name }}</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Drawer - Panels (Navigator, Layers, History) -->
+                <div class="tablet-drawer right" :class="{ open: tabletRightDrawerOpen }">
+                    <div class="tablet-drawer-header">
+                        <div class="tablet-drawer-tabs">
+                            <button class="tablet-drawer-tab" :class="{ active: tabletRightTab === 'navigator' }"
+                                @click="tabletRightTab = 'navigator'">Navigator</button>
+                            <button class="tablet-drawer-tab" :class="{ active: tabletRightTab === 'layers' }"
+                                @click="tabletRightTab = 'layers'">Layers</button>
+                            <button class="tablet-drawer-tab" :class="{ active: tabletRightTab === 'history' }"
+                                @click="tabletRightTab = 'history'">History</button>
+                        </div>
+                        <button class="tablet-panel-close" @click="tabletRightDrawerOpen = false">&times;</button>
+                    </div>
+                    <div class="tablet-drawer-content">
+                        <!-- Navigator Tab -->
+                        <div v-show="tabletRightTab === 'navigator'" class="tablet-tab-content">
+                            <canvas ref="tabletNavigatorCanvas" class="tablet-navigator-canvas"
+                                @mousedown="navigatorMouseDown" @mousemove="navigatorMouseMove"
+                                @mouseup="navigatorMouseUp" @mouseleave="navigatorMouseUp"
+                                @touchstart.prevent="navigatorTouchStart" @touchmove.prevent="navigatorTouchMove"
+                                @touchend.prevent="navigatorMouseUp"></canvas>
+                            <div class="tablet-zoom-controls">
+                                <button class="tablet-btn tablet-btn-secondary" @click="zoomOut">−</button>
+                                <span class="tablet-zoom-display">{{ Math.round(zoom * 100) }}%</span>
+                                <button class="tablet-btn tablet-btn-secondary" @click="zoomIn">+</button>
+                                <button class="tablet-btn tablet-btn-secondary" @click="setZoomPercent(100)">1:1</button>
+                                <button class="tablet-btn tablet-btn-secondary" @click="fitToWindow">Fit</button>
+                            </div>
+                        </div>
+
+                        <!-- Layers Tab -->
+                        <div v-show="tabletRightTab === 'layers'" class="tablet-tab-content">
+                            <div class="tablet-layers-list">
+                                <div v-for="layer in reversedLayers" :key="layer.id" class="tablet-layer-item"
+                                    :class="{ active: layer.id === activeLayerId }" @click="selectLayer(layer.id)">
+                                    <canvas class="tablet-layer-thumb" :ref="'tabletLayerThumb_' + layer.id"></canvas>
+                                    <div class="tablet-layer-info">
+                                        <div class="tablet-layer-name">{{ layer.name }}</div>
+                                        <div class="tablet-layer-opacity">{{ Math.round(layer.opacity * 100) }}%</div>
+                                    </div>
+                                    <button class="tablet-layer-visibility" :class="{ visible: layer.visible }"
+                                        @click.stop="toggleLayerVisibility(layer.id)">
+                                        {{ layer.visible ? '👁' : '○' }}
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="tablet-layer-actions">
+                                <button class="tablet-btn tablet-btn-primary" @click="addLayer">+ New</button>
+                                <button class="tablet-btn tablet-btn-secondary" @click="duplicateLayer">Duplicate</button>
+                                <button class="tablet-btn tablet-btn-secondary" @click="deleteLayer">Delete</button>
+                                <button class="tablet-btn tablet-btn-secondary" @click="mergeDown">Merge</button>
+                            </div>
+                            <div class="tablet-layer-props" v-if="activeLayerId">
+                                <div class="tablet-prop-row">
+                                    <label>Opacity</label>
+                                    <input type="range" min="0" max="100" :value="Math.round(activeLayerOpacity * 100)"
+                                        @input="updateLayerOpacity($event.target.value / 100)">
+                                    <span>{{ Math.round(activeLayerOpacity * 100) }}%</span>
+                                </div>
+                                <div class="tablet-prop-row">
+                                    <label>Blend</label>
+                                    <select class="tablet-select" v-model="activeLayerBlendMode" @change="updateLayerBlendMode">
+                                        <option v-for="mode in blendModes" :key="mode" :value="mode">{{ mode }}</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- History Tab -->
+                        <div v-show="tabletRightTab === 'history'" class="tablet-tab-content">
+                            <div class="tablet-history-list">
+                                <div v-for="(item, idx) in historyList" :key="idx" class="tablet-history-item"
+                                    :class="{ active: idx === historyIndex, future: idx > historyIndex }"
+                                    @click="goToHistoryState(idx)">
+                                    <span class="tablet-history-icon">{{ idx > historyIndex ? '○' : '●' }}</span>
+                                    <span class="tablet-history-name">{{ item.name }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Drawer Overlay (tap to close) -->
+                <div class="tablet-drawer-overlay"
+                    :class="{ visible: tabletLeftDrawerOpen || tabletRightDrawerOpen }"
+                    @click="tabletLeftDrawerOpen = false; tabletRightDrawerOpen = false"></div>
+
+                <!-- Tablet Menu Popup -->
+                <div v-if="tabletMenuOpen" class="tablet-menu-popup" @click.stop>
+                    <div class="tablet-menu-section">
+                        <div class="tablet-menu-header">File</div>
+                        <button class="tablet-menu-item" @click="tabletMenuAction('new')">New Document</button>
+                        <button class="tablet-menu-item" @click="tabletMenuAction('export')">Export PNG</button>
+                    </div>
+                    <div class="tablet-menu-section">
+                        <div class="tablet-menu-header">Edit</div>
+                        <button class="tablet-menu-item" @click="tabletMenuAction('cut')">Cut</button>
+                        <button class="tablet-menu-item" @click="tabletMenuAction('copy')">Copy</button>
+                        <button class="tablet-menu-item" @click="tabletMenuAction('paste')">Paste</button>
+                        <button class="tablet-menu-item" @click="tabletMenuAction('selectAll')">Select All</button>
+                        <button class="tablet-menu-item" @click="tabletMenuAction('deselect')">Deselect</button>
+                    </div>
+                    <div class="tablet-menu-section">
+                        <div class="tablet-menu-header">Image</div>
+                        <button class="tablet-menu-item" @click="tabletMenuAction('flipH')">Flip Horizontal</button>
+                        <button class="tablet-menu-item" @click="tabletMenuAction('flipV')">Flip Vertical</button>
+                        <button class="tablet-menu-item" @click="tabletMenuAction('rotate90')">Rotate 90° CW</button>
+                        <button class="tablet-menu-item" @click="tabletMenuAction('rotate-90')">Rotate 90° CCW</button>
+                    </div>
+                    <div class="tablet-menu-section">
+                        <div class="tablet-menu-header">View</div>
+                        <button class="tablet-menu-item" @click="tabletMenuAction('desktop')">Switch to Desktop Mode</button>
+                        <button class="tablet-menu-item" @click="tabletMenuAction('toggleTheme')">
+                            {{ currentTheme === 'dark' ? 'Light Theme' : 'Dark Theme' }}
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Tablet Zoom Menu Popup -->
+                <div v-if="tabletZoomMenuOpen" class="tablet-zoom-popup" @click.stop>
+                    <button class="tablet-menu-item" @click="setZoomPercent(25); tabletZoomMenuOpen = false">25%</button>
+                    <button class="tablet-menu-item" @click="setZoomPercent(50); tabletZoomMenuOpen = false">50%</button>
+                    <button class="tablet-menu-item" @click="setZoomPercent(100); tabletZoomMenuOpen = false">100%</button>
+                    <button class="tablet-menu-item" @click="setZoomPercent(200); tabletZoomMenuOpen = false">200%</button>
+                    <button class="tablet-menu-item" @click="setZoomPercent(400); tabletZoomMenuOpen = false">400%</button>
+                    <button class="tablet-menu-item" @click="fitToWindow(); tabletZoomMenuOpen = false">Fit to Window</button>
+                </div>
+            </template>
+
+            <!-- ==================== LIMITED MODE UI ==================== -->
+            <template v-if="currentUIMode === 'limited'">
+                <!-- Floating Tool Toolbar -->
+                <div v-if="limitedSettings.showFloatingToolbar" class="limited-floating-toolbar"
+                    :class="limitedSettings.floatingToolbarPosition">
+                    <button v-for="toolId in limitedSettings.allowedTools" :key="toolId"
+                        class="limited-tool-btn" :class="{ active: currentToolId === toolId }"
+                        @click="selectTool(toolId)" :title="getToolName(toolId)">
+                        <span v-html="getToolIcon(getToolIconId(toolId))"></span>
+                    </button>
+                </div>
+
+                <!-- Floating Color Picker (if allowed) -->
+                <div v-if="limitedSettings.showFloatingColorPicker && limitedSettings.allowColorPicker"
+                    class="limited-color-picker">
+                    <div class="limited-color-swatch" :style="{ backgroundColor: fgColor }"
+                        @click="openLimitedColorPicker" title="Current Color"></div>
+                    <div class="limited-color-grid">
+                        <div v-for="color in limitedQuickColors" :key="color" class="limited-color-cell"
+                            :style="{ backgroundColor: color }" @click="setForegroundColor(color)"></div>
+                    </div>
+                </div>
+
+                <!-- Floating Undo Button (if allowed) -->
+                <div v-if="limitedSettings.showFloatingUndo && limitedSettings.allowUndo" class="limited-action-group">
+                    <button class="limited-action-btn" @click="undo" :disabled="!canUndo" title="Undo">
+                        <span v-html="getToolIcon('undo')"></span>
+                    </button>
+                </div>
+
+                <!-- Floating Navigator (if zoomed and allowed) -->
+                <div v-if="limitedSettings.showNavigator && limitedSettings.allowZoom && zoom !== 1.0"
+                    class="limited-floating-navigator">
+                    <canvas ref="limitedNavigatorCanvas" class="limited-navigator-canvas"
+                        @mousedown="navigatorMouseDown" @mousemove="navigatorMouseMove" @mouseup="navigatorMouseUp"
+                        @touchstart.prevent="navigatorTouchStart" @touchmove.prevent="navigatorTouchMove" @touchend.prevent="navigatorMouseUp"></canvas>
+                </div>
+            </template>
+
+            <!-- ==================== DESKTOP MODE UI ==================== -->
+            <!-- Top toolbar (Desktop only) -->
+            <div class="toolbar-container" v-if="currentUIMode === 'desktop'">
                 <div class="toolbar" ref="toolbar">
                     <div class="toolbar-left">
                         <div class="toolbar-menu">
@@ -32,8 +257,8 @@ export default {
                 </div>
             </div>
 
-            <!-- Document Tabs -->
-            <div class="document-tabs" v-if="documentTabs.length > 1 || showDocumentTabs">
+            <!-- Document Tabs (Desktop only) -->
+            <div class="document-tabs" v-if="currentUIMode === 'desktop' && (documentTabs.length > 1 || showDocumentTabs)">
                 <div class="document-tabs-scroll">
                     <div
                         v-for="doc in documentTabs"
@@ -52,7 +277,7 @@ export default {
             </div>
 
             <!-- Tool Settings Ribbon -->
-            <div class="ribbon-bar" v-show="showRibbon">
+            <div class="ribbon-bar" v-show="currentUIMode === 'desktop' && showRibbon">
                 <div class="ribbon-tool-name">{{ currentToolName }}</div>
 
                 <!-- Color controls in ribbon (GIMP/Photoshop style) -->
@@ -155,8 +380,8 @@ export default {
 
             <!-- Main editor area -->
             <div class="editor-main">
-                <!-- Left tool panel -->
-                <div class="tool-panel" v-show="showToolPanel">
+                <!-- Left tool panel (Desktop) -->
+                <div class="tool-panel" v-show="currentUIMode === 'desktop' && showToolPanel">
                     <div class="tool-buttons-section">
                         <!-- Tool Groups -->
                         <div class="tool-group" v-for="group in toolGroups" :key="group.id"
@@ -189,6 +414,17 @@ export default {
                     </div>
                 </div>
 
+                <!-- Tablet Tool Strip - hidden, using drawer instead -->
+                <!-- <div class="tablet-tool-strip" v-show="currentUIMode === 'tablet'">
+                    <button v-for="tool in tabletAllTools" :key="tool.id"
+                        class="tablet-tool-btn"
+                        :class="{ active: currentToolId === tool.id }"
+                        :title="tool.name"
+                        @click="selectTool(tool.id)">
+                        <span v-html="getToolIcon(tool.icon)"></span>
+                    </button>
+                </div> -->
+
                 <!-- Canvas container -->
                 <div class="canvas-container" ref="canvasContainer">
                     <canvas
@@ -219,7 +455,7 @@ export default {
                 </div>
 
                 <!-- Right panel -->
-                <div class="right-panel" v-show="showRightPanel">
+                <div class="right-panel" v-show="currentUIMode === 'desktop' && showRightPanel">
                     <!-- Navigator panel -->
                     <div class="navigator-panel" v-show="showNavigator">
                         <div class="panel-header" @mousedown="startPanelDrag('navigator', $event)">
@@ -353,8 +589,45 @@ export default {
                 </div>
             </div>
 
-            <!-- Status bar -->
-            <div class="status-bar">
+            <!-- Tablet Bottom Bar (tool properties and color) -->
+            <div class="tablet-bottom-bar" v-show="currentUIMode === 'tablet'">
+                <div class="tablet-current-tool">
+                    <span class="tablet-tool-indicator" v-html="getToolIcon(getToolIconId(currentToolId))"></span>
+                    <span class="tablet-tool-name">{{ currentToolName }}</span>
+                </div>
+                <div class="tablet-bottom-divider"></div>
+                <div class="tablet-prop" v-if="tabletShowSize">
+                    <label>Size</label>
+                    <input type="range" min="1" max="200" :value="tabletBrushSize" @input="updateTabletBrushSize($event.target.value)">
+                    <span class="tablet-prop-value">{{ tabletBrushSize }}px</span>
+                </div>
+                <div class="tablet-prop" v-if="tabletShowOpacity">
+                    <label>Opacity</label>
+                    <input type="range" min="0" max="100" :value="tabletOpacity" @input="updateTabletOpacity($event.target.value)">
+                    <span class="tablet-prop-value">{{ tabletOpacity }}%</span>
+                </div>
+                <div class="tablet-prop" v-if="tabletShowHardness">
+                    <label>Hardness</label>
+                    <input type="range" min="0" max="100" :value="tabletHardness" @input="updateTabletHardness($event.target.value)">
+                    <span class="tablet-prop-value">{{ tabletHardness }}%</span>
+                </div>
+                <div style="flex: 1;"></div>
+                <div class="tablet-color-controls">
+                    <div class="tablet-color-swatches">
+                        <div class="tablet-color-btn fg" :style="{ backgroundColor: fgColor }"
+                            @click="openColorPicker('fg', $event)" title="Foreground Color"></div>
+                        <div class="tablet-color-btn bg" :style="{ backgroundColor: bgColor }"
+                            @click="openColorPicker('bg', $event)" title="Background Color"></div>
+                    </div>
+                    <button class="tablet-icon-btn" @click="swapColors" title="Swap Colors (X)">&#8633;</button>
+                    <button class="tablet-icon-btn" @click="resetColors" title="Reset Colors (D)">
+                        <span style="font-size: 12px;">B/W</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Status bar (hidden in limited mode) -->
+            <div class="status-bar" v-show="currentUIMode !== 'limited'">
                 <span class="status-coords">{{ coordsX }}, {{ coordsY }}</span>
                 <span class="status-separator">|</span>
                 <span class="status-size">{{ docWidth }} x {{ docHeight }}</span>
@@ -435,6 +708,30 @@ export default {
                     <div class="menu-item menu-checkbox" @click="toggleViewOption('showSources')">
                         <span class="menu-check" v-html="showSources ? '&#10003;' : ''"></span>
                         Image Sources
+                    </div>
+                    <div class="menu-separator"></div>
+                    <div class="menu-header">Theme</div>
+                    <div class="menu-item menu-checkbox" @click="setTheme('dark')">
+                        <span class="menu-check" v-html="currentTheme === 'dark' ? '&#10003;' : ''"></span>
+                        Dark Theme
+                    </div>
+                    <div class="menu-item menu-checkbox" @click="setTheme('light')">
+                        <span class="menu-check" v-html="currentTheme === 'light' ? '&#10003;' : ''"></span>
+                        Light Theme
+                    </div>
+                    <div class="menu-separator"></div>
+                    <div class="menu-header">UI Mode</div>
+                    <div class="menu-item menu-checkbox" @click="setUIMode('desktop')">
+                        <span class="menu-check" v-html="currentUIMode === 'desktop' ? '&#10003;' : ''"></span>
+                        Desktop Mode
+                    </div>
+                    <div class="menu-item menu-checkbox" @click="setUIMode('tablet')">
+                        <span class="menu-check" v-html="currentUIMode === 'tablet' ? '&#10003;' : ''"></span>
+                        Tablet Mode
+                    </div>
+                    <div class="menu-item menu-checkbox" @click="setUIMode('limited')">
+                        <span class="menu-check" v-html="currentUIMode === 'limited' ? '&#10003;' : ''"></span>
+                        Limited Mode
                     </div>
                     <div class="menu-separator"></div>
                     <div class="menu-header">Zoom</div>
@@ -589,10 +886,84 @@ export default {
             }
             return sorted;
         },
+        reversedLayers() {
+            // Layers in reverse order (top to bottom) for layer panel display
+            return this.layers.slice().reverse();
+        },
     },
 
     data() {
+        // Mode is set by inline script (URL param or defaults to desktop)
+        let initialMode = window.__slopstagUrlMode || 'desktop';
+        let initialTheme = 'dark';
+
+        // Theme from localStorage
+        try {
+            const savedTheme = localStorage.getItem('slopstag-theme');
+            if (savedTheme) initialTheme = savedTheme;
+        } catch (e) {
+            // Ignore errors
+        }
+
         return {
+            // Theme and UI mode
+            currentTheme: initialTheme,
+            currentUIMode: initialMode,
+
+            // Tablet mode state
+            tabletLeftDrawerOpen: false,     // Tools drawer open
+            tabletRightDrawerOpen: false,    // Panels drawer open
+            tabletRightTab: 'layers',        // Active tab in right drawer: 'navigator', 'layers', 'history'
+            tabletMenuOpen: false,           // Menu popup open
+            tabletZoomMenuOpen: false,       // Zoom menu popup open
+            tabletBrushSize: 20,             // Current brush/eraser size for tablet UI
+            tabletOpacity: 100,              // Current opacity for tablet UI
+            tabletHardness: 100,             // Current hardness for tablet UI
+            tabletShowSize: true,            // Whether to show size slider
+            tabletShowOpacity: true,         // Whether to show opacity slider
+            tabletShowHardness: false,       // Whether to show hardness slider
+            tabletAllTools: [                // All tools available in tablet mode
+                { id: 'selection', name: 'Select', icon: 'selection' },
+                { id: 'lasso', name: 'Lasso', icon: 'lasso' },
+                { id: 'magicwand', name: 'Magic Wand', icon: 'magicwand' },
+                { id: 'move', name: 'Move', icon: 'move' },
+                { id: 'brush', name: 'Brush', icon: 'brush' },
+                { id: 'pencil', name: 'Pencil', icon: 'pencil' },
+                { id: 'spray', name: 'Spray', icon: 'spray' },
+                { id: 'eraser', name: 'Eraser', icon: 'eraser' },
+                { id: 'fill', name: 'Fill', icon: 'fill' },
+                { id: 'gradient', name: 'Gradient', icon: 'gradient' },
+                { id: 'eyedropper', name: 'Eyedropper', icon: 'eyedropper' },
+                { id: 'line', name: 'Line', icon: 'line' },
+                { id: 'rect', name: 'Rectangle', icon: 'rect' },
+                { id: 'circle', name: 'Ellipse', icon: 'circle' },
+                { id: 'polygon', name: 'Polygon', icon: 'polygon' },
+                { id: 'text', name: 'Text', icon: 'text' },
+                { id: 'crop', name: 'Crop', icon: 'crop' },
+                { id: 'clone', name: 'Clone', icon: 'clone' },
+                { id: 'smudge', name: 'Smudge', icon: 'smudge' },
+                { id: 'blur', name: 'Blur', icon: 'blur' },
+            ],
+
+            // Limited mode state and settings
+            limitedSettings: {
+                allowedTools: ['brush', 'eraser'],
+                allowColorPicker: true,
+                allowUndo: true,
+                allowZoom: false,
+                showFloatingToolbar: true,
+                showFloatingColorPicker: true,
+                showFloatingUndo: true,
+                showNavigator: false,
+                floatingToolbarPosition: 'top',
+                enableKeyboardShortcuts: false,
+            },
+            limitedQuickColors: [
+                '#000000', '#FFFFFF', '#FF0000', '#00FF00',
+                '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF',
+                '#FF8000', '#8000FF', '#00FF80', '#FF0080'
+            ],
+
             // Document state
             docWidth: 800,
             docHeight: 600,
@@ -795,6 +1166,8 @@ export default {
                 { History },
                 { Clipboard },
                 { ToolManager },
+                { themeManager },
+                { UIConfig },
                 { BrushTool },
                 { PencilTool },
                 { CloneStampTool },
@@ -833,6 +1206,8 @@ export default {
                 import('/static/js/core/History.js'),
                 import('/static/js/core/Clipboard.js'),
                 import('/static/js/tools/ToolManager.js'),
+                import('/static/js/config/ThemeManager.js'),
+                import('/static/js/config/UIConfig.js'),
                 import('/static/js/tools/BrushTool.js'),
                 import('/static/js/tools/PencilTool.js'),
                 import('/static/js/tools/CloneStampTool.js'),
@@ -947,6 +1322,30 @@ export default {
             // Store state
             editorState.set(this, app);
 
+            // Initialize theme and UI configuration
+            themeManager.init();
+            UIConfig.init();
+            this.currentTheme = themeManager.getTheme();
+            // Keep URL-specified mode (set in data()), don't override from localStorage
+            // this.currentUIMode is already set from window.__slopstagUrlMode in data()
+
+            // Store references for easy access
+            app.themeManager = themeManager;
+            app.uiConfig = UIConfig;
+
+            // Listen for theme changes
+            themeManager.addListener((newTheme) => {
+                this.currentTheme = newTheme;
+            });
+
+            // Listen for mode changes
+            UIConfig.addListener((key, newValue) => {
+                if (key === 'mode') {
+                    this.currentUIMode = newValue;
+                    this.onModeChange(newValue);
+                }
+            });
+
             // Create initial document through DocumentManager
             app.documentManager.createDocument({
                 width: this.docWidth,
@@ -997,6 +1396,11 @@ export default {
 
                 // Update cursor for the new tool
                 this.updateBrushCursor();
+
+                // Sync tablet UI with tool properties
+                if (this.currentUIMode === 'tablet') {
+                    this.syncTabletToolProperties();
+                }
             });
 
             eventBus.on('layer:added', () => {
@@ -1468,6 +1872,317 @@ export default {
             this.showNavigator = !this.showNavigator;
         },
 
+        // Theme and Mode methods
+
+        setTheme(theme) {
+            const app = this.getState();
+            if (app?.themeManager) {
+                app.themeManager.setTheme(theme);
+            }
+            this.closeMenu();
+        },
+
+        toggleTheme() {
+            const app = this.getState();
+            if (app?.themeManager) {
+                app.themeManager.toggle();
+            }
+        },
+
+        setUIMode(mode) {
+            const app = this.getState();
+            if (app?.uiConfig) {
+                app.uiConfig.setMode(mode);
+            }
+            this.closeMenu();
+        },
+
+        onModeChange(mode) {
+            // Handle mode-specific UI changes
+            console.log('UI mode changed to:', mode);
+
+            // Close any open panels/drawers
+            this.tabletPanelOpen = null;
+            this.tabletDrawerOpen = null;
+
+            // Load mode-specific settings from UIConfig
+            const app = this.getState();
+            if (mode === 'limited' && app?.uiConfig) {
+                const limitedConfig = app.uiConfig.getModeSettings('limited');
+                this.limitedSettings = { ...this.limitedSettings, ...limitedConfig };
+
+                // Ensure we only show allowed tools - switch to first allowed tool if current is not allowed
+                if (!this.limitedSettings.allowedTools.includes(this.currentToolId)) {
+                    const firstTool = this.limitedSettings.allowedTools[0] || 'brush';
+                    this.selectTool(firstTool);
+                }
+            }
+
+            // Update visibility based on mode
+            if (mode === 'desktop') {
+                this.showToolPanel = true;
+                this.showRibbon = true;
+                this.showRightPanel = true;
+            } else if (mode === 'tablet') {
+                // Tablet mode - CSS handles visibility via data-mode attribute
+                this.showToolPanel = false;  // CSS hides desktop panel
+                this.showRibbon = false;     // CSS hides ribbon
+                this.showRightPanel = false; // CSS hides right panel
+            } else if (mode === 'limited') {
+                // Limited mode - minimal UI, CSS handles most of it
+                this.showToolPanel = false;
+                this.showRibbon = false;
+                this.showRightPanel = false;
+            }
+
+            // Refit canvas to new available space
+            this.$nextTick(() => {
+                this.fitToWindow();
+            });
+        },
+
+        // Tablet mode methods
+
+        showTabletMenu() {
+            this.tabletMenuOpen = !this.tabletMenuOpen;
+            this.tabletZoomMenuOpen = false;
+            if (this.tabletMenuOpen) {
+                // Close menu when clicking outside
+                setTimeout(() => {
+                    const closeHandler = (e) => {
+                        if (!e.target.closest('.tablet-menu-popup')) {
+                            this.tabletMenuOpen = false;
+                            document.removeEventListener('click', closeHandler);
+                        }
+                    };
+                    document.addEventListener('click', closeHandler);
+                }, 10);
+            }
+        },
+
+        showTabletZoomMenu() {
+            this.tabletZoomMenuOpen = !this.tabletZoomMenuOpen;
+            this.tabletMenuOpen = false;
+            if (this.tabletZoomMenuOpen) {
+                setTimeout(() => {
+                    const closeHandler = (e) => {
+                        if (!e.target.closest('.tablet-zoom-popup')) {
+                            this.tabletZoomMenuOpen = false;
+                            document.removeEventListener('click', closeHandler);
+                        }
+                    };
+                    document.addEventListener('click', closeHandler);
+                }, 10);
+            }
+        },
+
+        tabletMenuAction(action) {
+            this.tabletMenuOpen = false;
+            switch (action) {
+                case 'new':
+                    this.showNewDocumentDialog();
+                    break;
+                case 'export':
+                    this.menuAction('export');
+                    break;
+                case 'cut':
+                    this.cutSelection();
+                    break;
+                case 'copy':
+                    this.copySelection();
+                    break;
+                case 'paste':
+                    this.pasteSelection();
+                    break;
+                case 'selectAll':
+                    this.selectAll();
+                    break;
+                case 'deselect':
+                    this.deselect();
+                    break;
+                case 'flipH':
+                    this.flipHorizontal();
+                    break;
+                case 'flipV':
+                    this.flipVertical();
+                    break;
+                case 'rotate90':
+                    this.rotate(90);
+                    break;
+                case 'rotate-90':
+                    this.rotate(-90);
+                    break;
+                case 'desktop':
+                    this.setUIMode('desktop');
+                    break;
+                case 'toggleTheme':
+                    this.toggleTheme();
+                    break;
+            }
+        },
+
+        zoomIn() {
+            const app = this.getState();
+            if (!app?.renderer) return;
+            const canvas = this.$refs.mainCanvas;
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            app.renderer.zoomAt(1.25, centerX, centerY);
+            this.zoom = app.renderer.zoom;
+            this.updateNavigator();
+        },
+
+        zoomOut() {
+            const app = this.getState();
+            if (!app?.renderer) return;
+            const canvas = this.$refs.mainCanvas;
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            app.renderer.zoomAt(0.8, centerX, centerY);
+            this.zoom = app.renderer.zoom;
+            this.updateNavigator();
+        },
+
+        updateTabletNavigator() {
+            const app = this.getState();
+            if (!app?.renderer || !app?.layerStack) return;
+
+            const canvas = this.$refs.tabletNavigatorCanvas;
+            if (!canvas) return;
+
+            const ctx = canvas.getContext('2d');
+            const maxSize = 240;
+
+            // Calculate scale to fit navigator
+            const docWidth = app.renderer.compositeCanvas?.width || this.docWidth;
+            const docHeight = app.renderer.compositeCanvas?.height || this.docHeight;
+            const scale = Math.min(maxSize / docWidth, maxSize / docHeight);
+
+            canvas.width = Math.round(docWidth * scale);
+            canvas.height = Math.round(docHeight * scale);
+
+            // Draw document preview
+            ctx.drawImage(app.renderer.compositeCanvas, 0, 0, canvas.width, canvas.height);
+
+            // Draw viewport rectangle
+            const displayCanvas = this.$refs.mainCanvas;
+            if (displayCanvas) {
+                const viewLeft = -app.renderer.panX / app.renderer.zoom;
+                const viewTop = -app.renderer.panY / app.renderer.zoom;
+                const viewWidth = displayCanvas.width / app.renderer.zoom;
+                const viewHeight = displayCanvas.height / app.renderer.zoom;
+
+                ctx.strokeStyle = '#ff3333';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(
+                    viewLeft * scale,
+                    viewTop * scale,
+                    viewWidth * scale,
+                    viewHeight * scale
+                );
+            }
+        },
+
+        updateTabletHardness(value) {
+            this.tabletHardness = parseInt(value);
+            this.updateToolProperty('hardness', this.tabletHardness / 100);
+        },
+
+        // Limited mode methods
+
+        getToolName(toolId) {
+            const toolNames = {
+                brush: 'Brush',
+                eraser: 'Eraser',
+                pencil: 'Pencil',
+                fill: 'Fill',
+                line: 'Line',
+                rect: 'Rectangle',
+                circle: 'Ellipse',
+                spray: 'Spray',
+                eyedropper: 'Eyedropper'
+            };
+            return toolNames[toolId] || toolId;
+        },
+
+        getToolIconId(toolId) {
+            // Map tool IDs to icon IDs (most are the same)
+            const iconMap = {
+                brush: 'brush',
+                eraser: 'eraser',
+                pencil: 'pencil',
+                fill: 'fill',
+                line: 'line',
+                rect: 'square',
+                circle: 'circle',
+                spray: 'spray',
+                eyedropper: 'eyedropper'
+            };
+            return iconMap[toolId] || toolId;
+        },
+
+        openLimitedColorPicker() {
+            // Open color picker in limited mode
+            this.openColorPicker('fg', { target: { getBoundingClientRect: () => ({ left: 16, bottom: 150 }) } });
+        },
+
+        setForegroundColor(color) {
+            this.fgColor = color;
+            const app = this.getState();
+            if (app) {
+                app.foregroundColor = color;
+            }
+            this.addRecentColor(color);
+        },
+
+        // Tablet mode methods
+
+        updateTabletBrushSize(value) {
+            this.tabletBrushSize = parseInt(value);
+            this.updateToolProperty('size', this.tabletBrushSize);
+        },
+
+        updateTabletOpacity(value) {
+            this.tabletOpacity = parseInt(value);
+            this.updateToolProperty('opacity', this.tabletOpacity / 100);
+        },
+
+        syncTabletToolProperties() {
+            // Sync tablet UI with current tool properties
+            const app = this.getState();
+            const tool = app?.toolManager?.currentTool;
+            if (tool) {
+                // Size
+                if (tool.size !== undefined) {
+                    this.tabletBrushSize = tool.size;
+                    this.tabletShowSize = true;
+                } else {
+                    this.tabletShowSize = false;
+                }
+
+                // Opacity
+                if (tool.opacity !== undefined) {
+                    this.tabletOpacity = Math.round(tool.opacity * 100);
+                    this.tabletShowOpacity = true;
+                } else {
+                    this.tabletShowOpacity = false;
+                }
+
+                // Hardness
+                if (tool.hardness !== undefined) {
+                    this.tabletHardness = Math.round(tool.hardness * 100);
+                    this.tabletShowHardness = true;
+                } else {
+                    this.tabletShowHardness = false;
+                }
+            }
+
+            // Update tablet navigator if right drawer is open on navigator tab
+            if (this.tabletRightDrawerOpen && this.tabletRightTab === 'navigator') {
+                this.$nextTick(() => this.updateTabletNavigator());
+            }
+        },
+
         // Navigator methods
 
         /**
@@ -1587,6 +2302,51 @@ export default {
 
         navigatorMouseUp() {
             this.navigatorDragging = false;
+        },
+
+        navigatorTouchStart(e) {
+            if (e.touches.length === 1) {
+                this.navigatorDragging = true;
+                this.navigatorPanTouch(e.touches[0]);
+            }
+        },
+
+        navigatorTouchMove(e) {
+            if (this.navigatorDragging && e.touches.length === 1) {
+                this.navigatorPanTouch(e.touches[0]);
+            }
+        },
+
+        navigatorPanTouch(touch) {
+            const app = this.getState();
+            if (!app?.renderer) return;
+
+            // Try tablet navigator first, then desktop navigator
+            const canvas = this.$refs.tabletNavigatorCanvas || this.$refs.navigatorCanvas;
+            if (!canvas) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+
+            const docWidth = app.renderer.compositeCanvas?.width || this.docWidth;
+            const docHeight = app.renderer.compositeCanvas?.height || this.docHeight;
+            const maxSize = 200;
+            const scale = Math.min(maxSize / docWidth, maxSize / docHeight);
+
+            const docX = x / scale;
+            const docY = y / scale;
+
+            const displayCanvas = this.$refs.mainCanvas;
+            if (!displayCanvas) return;
+
+            const viewWidth = displayCanvas.width / app.renderer.zoom;
+            const viewHeight = displayCanvas.height / app.renderer.zoom;
+
+            app.renderer.panX = -(docX - viewWidth / 2) * app.renderer.zoom;
+            app.renderer.panY = -(docY - viewHeight / 2) * app.renderer.zoom;
+            app.renderer.requestRender();
+            this.updateNavigator();
         },
 
         navigatorPan(e) {
@@ -2104,6 +2864,7 @@ export default {
 
         getToolIcon(icon) {
             const icons = {
+                // Tool icons
                 'selection': '&#9633;',    // White square (selection)
                 'lasso': '&#10551;',       // Lasso curve
                 'magicwand': '&#10022;',   // Star/wand
@@ -2112,10 +2873,12 @@ export default {
                 'pen': '&#9998;',          // Pen (bezier path)
                 'hand': '&#9995;',         // Hand (pan)
                 'brush': '&#128396;',      // Pencil
+                'pencil': '&#9999;',       // Pencil
                 'spray': '&#9729;',        // Cloud (spray)
                 'eraser': '&#9986;',       // Scissors
                 'line': '&#9585;',         // Diagonal line
                 'rect': '&#9634;',         // Square
+                'square': '&#9634;',       // Square (alias)
                 'circle': '&#9679;',       // Circle
                 'polygon': '&#11039;',     // Pentagon
                 'shape': '&#9671;',        // Diamond
@@ -2124,6 +2887,27 @@ export default {
                 'text': '&#84;',           // Letter T
                 'eyedropper': '&#128083;', // Eyeglasses
                 'crop': '&#8862;',         // Crop frame
+                'clone': '&#128274;',      // Stamp
+                'smudge': '&#9757;',       // Finger pointing
+                'blur': '&#128167;',       // Water drop
+
+                // UI/Action icons for tablet mode
+                'menu': '&#9776;',         // Hamburger menu
+                'tools': '&#128295;',      // Wrench (tools)
+                'panels': '&#9881;',       // Gear/panels
+                'undo': '&#8630;',         // Undo arrow
+                'redo': '&#8631;',         // Redo arrow
+                'navigator': '&#9635;',    // Navigation/compass
+                'layers': '&#9776;',       // Layers (stacked)
+                'history': '&#128337;',    // Clock (history)
+                'settings': '&#9881;',     // Gear
+                'close': '&#10005;',       // X
+                'plus': '&#43;',           // Plus
+                'minus': '&#8722;',        // Minus
+                'zoom-in': '&#128269;',    // Magnifier
+                'zoom-out': '&#128270;',   // Magnifier minus
+                'save': '&#128190;',       // Floppy disk
+                'export': '&#128228;',     // Export arrow
             };
             return icons[icon] || '&#9679;';
         },
@@ -2791,6 +3575,16 @@ export default {
         handleKeyDown(e) {
             const app = this.getState();
             if (!app) return;
+
+            // In limited mode, block most keyboard shortcuts
+            if (this.currentUIMode === 'limited' && !this.limitedSettings.enableKeyboardShortcuts) {
+                // Only allow Ctrl+Z for undo if enabled
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && this.limitedSettings.allowUndo) {
+                    e.preventDefault();
+                    this.undo();
+                }
+                return; // Block all other shortcuts in limited mode
+            }
 
             // Ctrl/Cmd shortcuts
             if (e.ctrlKey || e.metaKey) {

@@ -121,10 +121,26 @@ app.mount("/debug", debug_router)
 
 
 @ui.page("/")
-async def index():
-    """Main editor page."""
+async def index(mode: str = None):
+    """Main editor page.
+
+    Args:
+        mode: Optional UI mode override via query param (?mode=desktop|tablet|limited)
+    """
     # Add stylesheet
     ui.add_head_html('<link rel="stylesheet" href="/static/css/main.css">')
+
+    # Set initial UI mode - URL query param, default to desktop
+    ui.add_head_html('''<script>
+        (function() {
+            var urlParams = new URLSearchParams(window.location.search);
+            var urlMode = urlParams.get('mode');
+            // Use URL param if valid, otherwise default to desktop
+            var mode = (urlMode && ['desktop', 'tablet', 'limited'].includes(urlMode)) ? urlMode : 'desktop';
+            document.documentElement.setAttribute('data-initial-mode', mode);
+            window.__slopstagUrlMode = mode;
+        })();
+    </script>''')
 
     # Inject console capture script
     ui.add_head_html(f'<script>{CONSOLE_CAPTURE_JS}</script>')
