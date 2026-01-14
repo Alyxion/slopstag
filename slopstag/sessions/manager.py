@@ -194,6 +194,60 @@ class SessionManager:
         except Exception as e:
             return None, {"error": str(e)}
 
+    async def export_document(
+        self,
+        session_id: str,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        """Export the full document as JSON.
+
+        Returns (document_data, metadata) or (None, error_dict).
+        """
+        session = self._sessions.get(session_id)
+        if not session:
+            return None, {"error": "Session not found"}
+
+        if not session.editor:
+            return None, {"error": "Editor not connected"}
+
+        session.update_activity()
+
+        try:
+            # Request serialized document from JavaScript
+            result = await session.editor.run_method("exportDocument")
+            if result and "document" in result:
+                return result["document"], {"success": True}
+            return None, {"error": "No document data returned"}
+        except Exception as e:
+            return None, {"error": str(e)}
+
+    async def import_document(
+        self,
+        session_id: str,
+        document_data: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Import a full document from JSON.
+
+        Returns success/error dict.
+        """
+        session = self._sessions.get(session_id)
+        if not session:
+            return {"success": False, "error": "Session not found"}
+
+        if not session.editor:
+            return {"success": False, "error": "Editor not connected"}
+
+        session.update_activity()
+
+        try:
+            # Send document to JavaScript for import
+            result = await session.editor.run_method(
+                "importDocument",
+                document_data,
+            )
+            return {"success": True, "result": result}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     def cleanup_inactive(self) -> None:
         """Remove sessions that have been inactive too long."""
         now = datetime.now()

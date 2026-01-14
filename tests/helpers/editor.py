@@ -524,3 +524,153 @@ class EditorTestHelper:
         """Wait for the next render cycle."""
         time.sleep(0.1)
         return self
+
+    # ===== Document Export/Import for Parity Testing =====
+
+    def export_document(self) -> Dict[str, Any]:
+        """Export the current document as JSON for parity testing."""
+        return self.execute_js("""
+            const root = document.querySelector('.editor-root');
+            const vm = root.__vue_app__._instance?.proxy;
+            return vm?.exportDocument();
+        """)
+
+    def import_document(self, document_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Import a document from JSON."""
+        doc_json = json.dumps(document_data)
+        return self.execute_js(f"""
+            const root = document.querySelector('.editor-root');
+            const vm = root.__vue_app__._instance?.proxy;
+            return vm?.importDocument({doc_json});
+        """)
+
+    def get_layer_image_data(self, layer_id: str = None) -> Dict[str, Any]:
+        """Get layer image as RGBA bytes (base64 encoded).
+
+        Returns dict with: data (base64), width, height
+        """
+        layer_arg = f"'{layer_id}'" if layer_id else "null"
+        return self.execute_js(f"""
+            const root = document.querySelector('.editor-root');
+            const vm = root.__vue_app__._instance?.proxy;
+            return vm?.getImageData({layer_arg});
+        """)
+
+    def get_composite_image_data(self) -> Dict[str, Any]:
+        """Get flattened composite image as RGBA bytes (base64 encoded)."""
+        return self.get_layer_image_data(None)
+
+    # ===== Text Layer Creation =====
+
+    def create_text_layer(self, text: str, x: int, y: int,
+                          font_size: int = 24, font_family: str = "Arial",
+                          color: str = "#000000", **kwargs) -> str:
+        """Create a text layer and return its ID."""
+        options = {
+            'text': text,
+            'x': x,
+            'y': y,
+            'fontSize': font_size,
+            'fontFamily': font_family,
+            'color': color,
+            **kwargs
+        }
+        options_json = json.dumps(options)
+        return self.execute_js(f"""
+            const root = document.querySelector('.editor-root');
+            const vm = root.__vue_app__._instance?.proxy;
+            const app = vm?.getState();
+
+            // Import TextLayer if available
+            const TextLayer = window.TextLayer;
+            if (!TextLayer) return null;
+
+            const options = {options_json};
+            const layer = new TextLayer({{
+                name: 'Text: ' + options.text.substring(0, 20),
+                offsetX: options.x,
+                offsetY: options.y,
+                fontSize: options.fontSize,
+                fontFamily: options.fontFamily,
+                color: options.color,
+                runs: [{{ text: options.text }}],
+                docWidth: app.layerStack.width,
+                docHeight: app.layerStack.height,
+            }});
+
+            app.layerStack.addLayer(layer);
+            vm?.updateLayerList();
+            return layer.id;
+        """)
+
+    def create_text_layer_with_runs(self, runs: List[Dict], x: int, y: int,
+                                    font_size: int = 24, **kwargs) -> str:
+        """Create a text layer with styled runs."""
+        options = {
+            'runs': runs,
+            'x': x,
+            'y': y,
+            'fontSize': font_size,
+            **kwargs
+        }
+        options_json = json.dumps(options)
+        return self.execute_js(f"""
+            const root = document.querySelector('.editor-root');
+            const vm = root.__vue_app__._instance?.proxy;
+            const app = vm?.getState();
+
+            const TextLayer = window.TextLayer;
+            if (!TextLayer) return null;
+
+            const options = {options_json};
+            const layer = new TextLayer({{
+                name: 'Rich Text',
+                offsetX: options.x,
+                offsetY: options.y,
+                fontSize: options.fontSize,
+                runs: options.runs,
+                docWidth: app.layerStack.width,
+                docHeight: app.layerStack.height,
+            }});
+
+            app.layerStack.addLayer(layer);
+            vm?.updateLayerList();
+            return layer.id;
+        """)
+
+    # ===== Vector Layer Creation =====
+
+    def create_vector_layer(self, shapes: List[Dict], width: int = None,
+                            height: int = None) -> str:
+        """Create a vector layer with shapes and return its ID."""
+        options = {'shapes': shapes}
+        if width:
+            options['width'] = width
+        if height:
+            options['height'] = height
+        options_json = json.dumps(options)
+        return self.execute_js(f"""
+            const root = document.querySelector('.editor-root');
+            const vm = root.__vue_app__._instance?.proxy;
+            const app = vm?.getState();
+
+            const VectorLayer = window.VectorLayer;
+            if (!VectorLayer) return null;
+
+            const options = {options_json};
+            const layer = new VectorLayer({{
+                name: 'Vector Layer',
+                width: options.width || app.layerStack.width,
+                height: options.height || app.layerStack.height,
+            }});
+
+            // Add shapes
+            for (const shapeData of options.shapes) {{
+                const shape = layer.createShape(shapeData.type, shapeData);
+                if (shape) layer.addShape(shape);
+            }}
+
+            app.layerStack.addLayer(layer);
+            vm?.updateLayerList();
+            return layer.id;
+        """)

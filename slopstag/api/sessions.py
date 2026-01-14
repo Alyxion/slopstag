@@ -24,6 +24,12 @@ class CommandRequest(BaseModel):
     params: dict[str, Any] = {}
 
 
+class DocumentImportRequest(BaseModel):
+    """Request body for document import."""
+
+    document: dict[str, Any]
+
+
 @router.get("")
 async def list_sessions() -> dict:
     """List all active editor sessions."""
@@ -141,6 +147,49 @@ async def execute_command(
         raise HTTPException(
             status_code=404 if "not found" in result.get("error", "").lower() else 500,
             detail=result.get("error", "Command execution failed"),
+        )
+
+    return result
+
+
+@router.get("/{session_id}/document/export")
+async def export_document(session_id: str) -> dict:
+    """Export the full document as JSON for cross-platform transfer.
+
+    Returns the complete document structure including all layers,
+    their content (raster as PNG data URLs, text/vector as data),
+    and document metadata.
+    """
+    document, metadata = await session_manager.export_document(session_id)
+
+    if document is None:
+        raise HTTPException(
+            status_code=404 if "not found" in metadata.get("error", "").lower() else 500,
+            detail=metadata.get("error", "Failed to export document"),
+        )
+
+    return {"document": document}
+
+
+@router.post("/{session_id}/document/import")
+async def import_document(
+    session_id: str,
+    request: DocumentImportRequest,
+) -> dict:
+    """Import a full document from JSON.
+
+    Replaces the current document with the imported one.
+    Supports all layer types: raster, text, vector.
+    """
+    result = await session_manager.import_document(
+        session_id,
+        request.document,
+    )
+
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=404 if "not found" in result.get("error", "").lower() else 500,
+            detail=result.get("error", "Failed to import document"),
         )
 
     return result

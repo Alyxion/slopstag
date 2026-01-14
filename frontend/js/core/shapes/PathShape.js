@@ -454,6 +454,62 @@ export class PathShape extends VectorShape {
         });
     }
 
+    /**
+     * Generate SVG path 'd' attribute.
+     */
+    toSVGPathD() {
+        if (this.points.length < 2) return '';
+
+        const parts = [`M ${this.points[0].x} ${this.points[0].y}`];
+
+        for (let i = 1; i < this.points.length; i++) {
+            const from = this.points[i - 1];
+            const to = this.points[i];
+            const hOut = from.getHandleOutAbs();
+            const hIn = to.getHandleInAbs();
+
+            if (hOut && hIn) {
+                // Cubic bezier
+                parts.push(`C ${hOut.x} ${hOut.y} ${hIn.x} ${hIn.y} ${to.x} ${to.y}`);
+            } else if (hOut) {
+                // Quadratic with control point from outgoing handle
+                parts.push(`Q ${hOut.x} ${hOut.y} ${to.x} ${to.y}`);
+            } else if (hIn) {
+                // Quadratic with control point from incoming handle
+                parts.push(`Q ${hIn.x} ${hIn.y} ${to.x} ${to.y}`);
+            } else {
+                // Line
+                parts.push(`L ${to.x} ${to.y}`);
+            }
+        }
+
+        // Close path if needed
+        if (this.closed && this.points.length > 2) {
+            const from = this.points[this.points.length - 1];
+            const to = this.points[0];
+            const hOut = from.getHandleOutAbs();
+            const hIn = to.getHandleInAbs();
+
+            if (hOut && hIn) {
+                parts.push(`C ${hOut.x} ${hOut.y} ${hIn.x} ${hIn.y} ${to.x} ${to.y}`);
+            } else if (hOut) {
+                parts.push(`Q ${hOut.x} ${hOut.y} ${to.x} ${to.y}`);
+            } else if (hIn) {
+                parts.push(`Q ${hIn.x} ${hIn.y} ${to.x} ${to.y}`);
+            }
+            parts.push('Z');
+        }
+
+        return parts.join(' ');
+    }
+
+    toSVGElement() {
+        const d = this.toSVGPathD();
+        if (!d) return '';
+        const style = this.getSVGStyleAttrs();
+        return `<path d="${d}" ${style}/>`;
+    }
+
     getProperties() {
         return [
             ...super.getProperties(),

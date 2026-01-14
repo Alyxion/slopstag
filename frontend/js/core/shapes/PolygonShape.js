@@ -164,6 +164,17 @@ export class PolygonShape extends VectorShape {
         });
     }
 
+    toSVGElement() {
+        if (this.points.length < 2) return '';
+        const style = this.getSVGStyleAttrs();
+        const pointsStr = this.points.map(pt => `${pt[0]},${pt[1]}`).join(' ');
+        if (this.closed) {
+            return `<polygon points="${pointsStr}" ${style}/>`;
+        } else {
+            return `<polyline points="${pointsStr}" ${style}/>`;
+        }
+    }
+
     getProperties() {
         return [
             ...super.getProperties(),

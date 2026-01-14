@@ -228,6 +228,171 @@ const docCoords = layer.canvasToDoc(canvasX, canvasY);
 - Operations outside layer bounds are clipped
 - Selections are in document space, not layer space
 
+## Cross-Platform Rendering (CRITICAL)
+
+**REQUIREMENT: Dynamic layers (text, vector) MUST render identically in JavaScript and Python.**
+
+This is a core architectural requirement. Any feature that renders dynamic content must:
+1. Produce pixel-identical output in both JS and Python
+2. Be verified by automated pixel diff tests
+3. Use the same algorithms (Lanczos downscaling, font rendering, etc.)
+
+### Vector Layer Rendering via SVG
+
+**All vector graphics MUST be representable as SVG.** See `docs/VECTOR_RENDERING.md` for full details.
+
+- Temporary Canvas 2D rendering is acceptable during editing
+- Final rasterization MUST use SVG rendering for cross-platform parity
+
+**Reference Renderers (DO NOT CHANGE):**
+- **JavaScript**: Chrome's native SVG renderer (via `<img>` element)
+- **Python**: resvg (via `resvg-py` package)
+
+These renderers are locked. Do NOT substitute with alternatives:
+- No resvg-wasm, canvg, or other JS SVG libraries
+- No CairoSVG, librsvg, svglib, or other Python SVG libraries
+
+**Anti-aliasing:** Use `shape-rendering="crispEdges"` for cross-platform parity testing. Chrome and resvg have different AA algorithms causing 1-4% difference on curves/diagonals with AA enabled. With `crispEdges` (AA disabled), both produce identical output.
+
+**Shape Types:** rect, ellipse, line, polygon, path
+
+**Parity Requirement:** 99.9% pixel match (≤0.1% difference) between JS and Python
+
+**Pixel Diff Algorithm:**
+- A pixel is "different" if ANY RGBA channel differs by 5 or more (out of 255)
+- Differences below 5 do not count as errors
+- Differences >0.1% indicate a real rendering bug, NOT anti-aliasing
+- **DO NOT increase the tolerance value** - fix the rendering instead
+
+**Adding New Vector Elements:**
+1. Add `toSVGElement()` to JS shape class
+2. Add shape case to Python's `shape_to_svg_element()`
+3. Add parity tests to `tests/test_vector_parity.py`
+4. **All tests MUST pass before merge**
+
+### Document Serialization
+
+Documents can be fully transferred between JS and Python using JSON serialization:
+
+```
+POST /api/sessions/{id}/document/export  → Full document JSON
+POST /api/sessions/{id}/document/import  ← Full document JSON
+```
+
+**Document Format:**
+```json
+{
+  "version": "1.0",
+  "id": "uuid",
+  "name": "Document Name",
+  "width": 800,
+  "height": 600,
+  "layers": [
+    {
+      "type": "raster",
+      "id": "uuid",
+      "name": "Layer 1",
+      "offsetX": 0,
+      "offsetY": 0,
+      "opacity": 1.0,
+      "blendMode": "normal",
+      "visible": true,
+      "imageData": "data:image/png;base64,..."
+    },
+    {
+      "type": "text",
+      "id": "uuid",
+      "runs": [{"text": "Hello", "fontSize": 24, "color": "#000000"}],
+      "fontSize": 24,
+      "fontFamily": "Arial",
+      ...
+    },
+    {
+      "type": "vector",
+      "id": "uuid",
+      "shapes": [{"type": "rect", "x": 10, "y": 10, "width": 100, "height": 50, ...}],
+      ...
+    }
+  ],
+  "activeLayerIndex": 0,
+  "foregroundColor": "#000000",
+  "backgroundColor": "#FFFFFF"
+}
+```
+
+### Python Rendering Module
+
+The `slopstag/rendering/` module provides Python implementations that match JS rendering:
+
+```
+slopstag/rendering/
+├── __init__.py          # Exports: render_text_layer, render_vector_layer, render_document, render_layer
+├── text.py              # Text layer rendering with PIL + Lanczos-3 downscaling
+├── vector.py            # Vector shapes via resvg (SVG rendering)
+├── document.py          # Full document compositing, pixel diff utilities
+└── lanczos.py           # Lanczos-3 resampling matching JS implementation
+```
+
+| Layer Type | Python Renderer | Algorithm |
+|------------|-----------------|-----------|
+| Text | PIL + Lanczos | 4x render + Lanczos-3 downscale |
+| Vector | resvg | Convert shapes to SVG, render with resvg-py |
+| Raster | Direct | Decode PNG data URL, no transformation |
+
+### Rendering API Endpoints
+
+Server-side rendering for parity testing:
+
+```
+POST /api/rendering/layer     # Render single layer to RGBA bytes
+POST /api/rendering/document  # Render full document to RGBA bytes
+POST /api/rendering/diff      # Compare two images, return diff metrics
+```
+
+### Pixel Diff Testing
+
+All dynamic layer rendering must pass pixel diff tests:
+
+```python
+from slopstag.rendering import render_text_layer, render_vector_layer
+from slopstag.rendering.document import compute_pixel_diff, images_match
+
+# Render layer in Python
+py_pixels = render_text_layer(layer_data, output_width=200, output_height=100)
+
+# Compare with JS rendering
+diff_ratio, diff_image = compute_pixel_diff(js_pixels, py_pixels)
+assert images_match(js_pixels, py_pixels, tolerance=0.05)  # 95% match
+```
+
+### Rendering Parity Tests
+
+Two test files ensure cross-platform rendering consistency:
+
+**`tests/test_rendering_parity.py`** - Unit tests (no browser required):
+- `TestLanczosResampling` - Lanczos-3 algorithm correctness
+- `TestTextRendering` - Text layer output validation
+- `TestVectorRendering` - Vector shapes (rect, ellipse, line, polygon)
+- `TestDocumentRendering` - Layer compositing, opacity, visibility
+- `TestPixelDiff` - Diff utility functions
+
+**`tests/test_rendering_parity_integration.py`** - Browser integration tests:
+- `TestTextLayerParity` - JS vs Python text rendering comparison
+- `TestVectorLayerParity` - JS vs Python vector rendering comparison
+- `TestDocumentParity` - Full document export/render comparison
+- `TestRenderingAPI` - Server-side rendering API validation
+
+### Adding New Dynamic Layer Types
+
+When adding a new dynamic (non-raster) layer type:
+
+1. Implement JS renderer in `frontend/js/core/`
+2. Implement Python renderer in `slopstag/rendering/`
+3. Add unit tests in `tests/test_rendering_parity.py`
+4. Add integration tests in `tests/test_rendering_parity_integration.py`
+5. Document the rendering algorithm in this file
+6. **All tests MUST pass before the feature is considered complete**
+
 ## Testing
 
 ### Test Framework
@@ -241,9 +406,32 @@ Tests use Selenium WebDriver with a unified helper system in `tests/helpers/`:
 
 ### Running Tests
 ```bash
-pytest tests/                    # All tests
-pytest tests/test_tools_*.py    # Tool tests only
-pytest -k "brush"                # Tests matching pattern
+pytest tests/                                    # All tests
+pytest tests/test_tools_*.py                    # Tool tests only
+pytest tests/test_rendering_parity.py -v        # Python rendering unit tests (no browser)
+pytest tests/test_rendering_parity_playwright.py -v  # JS/Python parity tests (uses Playwright)
+pytest -k "brush"                                # Tests matching pattern
+```
+
+### Browser-Based Parity Tests (Playwright)
+
+The `test_rendering_parity_playwright.py` tests use **Playwright** to run JavaScript in a real browser and compare output with Python rendering. Playwright bundles its own Chromium, so no external driver needed.
+
+**Setup:**
+```bash
+pip install playwright pytest-playwright
+playwright install chromium
+```
+
+**What these tests verify:**
+- Canvas shapes (rect, ellipse, line) render identically in JS and Python
+- Text rendering produces similar output
+- Lanczos downscaling preserves content in both
+
+**Note on ARM64 Linux:** PIL must be installed for ARM64. If system PIL is x86_64, install to a local path:
+```bash
+pip install --target=/tmp/pylibs pillow
+PYTHONPATH=/tmp/pylibs:$PYTHONPATH pytest tests/test_rendering_parity_playwright.py -v
 ```
 
 ### Testing Principles
@@ -353,3 +541,6 @@ def test_brush_on_offset_layer(self, helpers):
 - `test_tools_selection.py` - Selection tools with offset layers
 - `test_clipboard.py` - Copy/cut/paste with offset layers
 - `test_layers.py` - Layer operations
+- `test_rendering_parity.py` - Python rendering unit tests (21 tests, no browser)
+- `test_rendering_parity_playwright.py` - JS/Python parity tests via Playwright (7 tests)
+- `test_vector_parity.py` - Vector layer JS/Python SVG rendering parity (requires Playwright)

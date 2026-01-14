@@ -197,7 +197,8 @@ export class VectorLayer extends Layer {
     }
 
     /**
-     * Render all shapes to the canvas.
+     * Render all shapes to the canvas using Canvas 2D API.
+     * Used for fast preview during editing.
      */
     render() {
         this.ctx.clearRect(0, 0, this.width, this.height);
@@ -213,6 +214,67 @@ export class VectorLayer extends Layer {
                 shape.renderSelection(this.ctx);
             }
         }
+    }
+
+    /**
+     * Generate SVG document from all shapes.
+     * This is the canonical representation for cross-platform parity.
+     * @returns {string} SVG document string
+     */
+    toSVG() {
+        const elements = this.shapes
+            .map(shape => shape.toSVGElement())
+            .filter(el => el);  // Remove empty elements
+
+        // Use shape-rendering="crispEdges" for cross-platform parity.
+        // This disables anti-aliasing, ensuring Chrome and resvg produce
+        // identical pixel output. With AA enabled (geometricPrecision),
+        // the renderers produce 1-4% pixel difference on curves/diagonals.
+        return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${this.width}" height="${this.height}" viewBox="0 0 ${this.width} ${this.height}" shape-rendering="crispEdges">
+  ${elements.join('\n  ')}
+</svg>`;
+    }
+
+    /**
+     * Render layer via SVG for pixel-accurate output.
+     * This matches Python's resvg rendering for cross-platform parity.
+     * @returns {Promise<void>}
+     */
+    async renderViaSVG() {
+        if (this.shapes.length === 0) {
+            this.ctx.clearRect(0, 0, this.width, this.height);
+            return;
+        }
+
+        const svg = this.toSVG();
+        const blob = new Blob([svg], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+
+        try {
+            const img = new Image();
+            await new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = reject;
+                img.src = url;
+            });
+
+            this.ctx.clearRect(0, 0, this.width, this.height);
+            this.ctx.drawImage(img, 0, 0);
+        } finally {
+            URL.revokeObjectURL(url);
+        }
+    }
+
+    /**
+     * Get raw RGBA pixel data after SVG rendering.
+     * Used for parity testing with Python.
+     * @returns {Promise<Uint8ClampedArray>}
+     */
+    async getPixelsViaSVG() {
+        await this.renderViaSVG();
+        const imageData = this.ctx.getImageData(0, 0, this.width, this.height);
+        return imageData.data;
     }
 
     /**

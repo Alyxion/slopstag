@@ -258,4 +258,23 @@ export class VectorShape {
             ctx.stroke();
         }
     }
+
+    /**
+     * Get SVG style attributes string.
+     * @returns {string} SVG style attributes
+     */
+    getSVGStyleAttrs() {
+        const fill = this.fill ? this.fillColor : 'none';
+        const stroke = this.stroke ? this.strokeColor : 'none';
+        return `fill="${fill}" stroke="${stroke}" stroke-width="${this.strokeWidth}" opacity="${this.opacity}"`;
+    }
+
+    /**
+     * Convert shape to SVG element string.
+     * Must be overridden by subclasses.
+     * @returns {string} SVG element
+     */
+    toSVGElement() {
+        throw new Error('toSVGElement() must be implemented by subclass');
+    }
 }

@@ -126,6 +126,11 @@ export class EllipseShape extends VectorShape {
     static fromData(data) {
         return new EllipseShape(data);
     }
+
+    toSVGElement() {
+        const style = this.getSVGStyleAttrs();
+        return `<ellipse cx="${this.cx}" cy="${this.cy}" rx="${Math.abs(this.rx)}" ry="${Math.abs(this.ry)}" ${style}/>`;
+    }
 }
 
 registerShape('ellipse', EllipseShape);

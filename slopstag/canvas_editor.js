@@ -1499,6 +1499,8 @@ export default {
                 { BackendConnector },
                 { PluginManager },
                 { DocumentManager },
+                { TextLayer },
+                { VectorLayer },
             ] = await Promise.all([
                 import('/static/js/utils/EventBus.js'),
                 import('/static/js/core/LayerStack.js'),
@@ -1539,7 +1541,13 @@ export default {
                 import('/static/js/plugins/BackendConnector.js'),
                 import('/static/js/plugins/PluginManager.js'),
                 import('/static/js/core/DocumentManager.js'),
+                import('/static/js/core/TextLayer.js'),
+                import('/static/js/core/VectorLayer.js'),
             ]);
+
+            // Expose layer classes to window for testing
+            window.TextLayer = TextLayer;
+            window.VectorLayer = VectorLayer;
 
             // Set up canvas
             const canvas = this.$refs.mainCanvas;
@@ -4883,6 +4891,72 @@ export default {
                 binary += String.fromCharCode(bytes[i]);
             }
             return btoa(binary);
+        },
+
+        async exportDocument() {
+            // Export the full document as JSON for cross-platform transfer
+            const app = this.getState();
+            if (!app) return { error: 'Editor not initialized' };
+
+            try {
+                const activeDoc = app.documentManager?.getActiveDocument();
+                if (!activeDoc) {
+                    return { error: 'No active document' };
+                }
+
+                // Serialize the document
+                const serialized = await activeDoc.serialize();
+
+                // Add format version
+                serialized.version = '1.0';
+
+                return { document: serialized };
+            } catch (e) {
+                return { error: e.message };
+            }
+        },
+
+        async importDocument(documentData) {
+            // Import a full document from JSON
+            const app = this.getState();
+            if (!app) return { error: 'Editor not initialized' };
+
+            try {
+                if (!documentData || !documentData.layers) {
+                    return { error: 'Invalid document format' };
+                }
+
+                // Import document using Document.deserialize
+                const eventBus = app.eventBus;
+                const importedDoc = await Document.deserialize(documentData, eventBus);
+
+                // Add to document manager
+                if (app.documentManager) {
+                    // Close current document and add imported one
+                    const currentDocId = app.documentManager.activeDocumentId;
+                    app.documentManager.documents.set(importedDoc.id, importedDoc);
+                    app.documentManager.switchToDocument(importedDoc.id);
+
+                    // Update Vue state
+                    this.docWidth = importedDoc.width;
+                    this.docHeight = importedDoc.height;
+                    this.updateDocumentTabs();
+                }
+
+                // Update renderer
+                app.layerStack = importedDoc.layerStack;
+                app.renderer.layerStack = importedDoc.layerStack;
+                app.renderer.resize(importedDoc.width, importedDoc.height);
+                app.renderer.fitToViewport();
+                app.renderer.requestRender();
+
+                // Update layers panel
+                this.updateLayerList();
+
+                return { success: true, documentId: importedDoc.id };
+            } catch (e) {
+                return { error: e.message };
+            }
         },
     },
 };

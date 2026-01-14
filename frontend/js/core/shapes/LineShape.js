@@ -154,6 +154,12 @@ export class LineShape extends VectorShape {
         return new LineShape(data);
     }
 
+    toSVGElement() {
+        // Lines only stroke, no fill
+        const linecap = this.lineCap || 'round';
+        return `<line x1="${this.x1}" y1="${this.y1}" x2="${this.x2}" y2="${this.y2}" stroke="${this.strokeColor}" stroke-width="${this.strokeWidth}" stroke-linecap="${linecap}" opacity="${this.opacity}"/>`;
+    }
+
     getProperties() {
         return [
             { id: 'stroke', name: 'Stroke', type: 'checkbox', value: this.stroke },

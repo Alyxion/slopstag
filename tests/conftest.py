@@ -282,3 +282,28 @@ def fresh_helpers(fresh_browser):
     h = TestHelpers(fresh_browser)
     h.editor.wait_for_editor()
     return h
+
+
+@pytest.fixture
+def editor(browser):
+    """Create an EditorTestHelper instance for rendering parity tests.
+
+    This is the primary fixture for parity integration tests.
+    Uses session-scoped browser for efficiency.
+    """
+    from tests.helpers.editor import EditorTestHelper
+    helper = EditorTestHelper(browser)
+    helper.wait_for_editor()
+    return helper
+
+
+@pytest.fixture
+def fresh_editor(fresh_browser):
+    """Create a fresh EditorTestHelper instance for each test.
+
+    Use this when tests need a clean slate (no leftover layers/state).
+    """
+    from tests.helpers.editor import EditorTestHelper
+    helper = EditorTestHelper(fresh_browser)
+    helper.wait_for_editor()
+    return helper

@@ -140,6 +140,15 @@ export class RectShape extends VectorShape {
         return new RectShape(data);
     }
 
+    toSVGElement() {
+        const style = this.getSVGStyleAttrs();
+        if (this.cornerRadius > 0) {
+            const r = Math.min(this.cornerRadius, this.width / 2, this.height / 2);
+            return `<rect x="${this.x}" y="${this.y}" width="${this.width}" height="${this.height}" rx="${r}" ry="${r}" ${style}/>`;
+        }
+        return `<rect x="${this.x}" y="${this.y}" width="${this.width}" height="${this.height}" ${style}/>`;
+    }
+
     getProperties() {
         return [
             ...super.getProperties(),
