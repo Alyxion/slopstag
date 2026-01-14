@@ -333,6 +333,63 @@ export default {
                     <button class="tablet-menu-item" @click="setZoomPercent(400); tabletZoomMenuOpen = false">400%</button>
                     <button class="tablet-menu-item" @click="fitToWindow(); tabletZoomMenuOpen = false">Fit to Window</button>
                 </div>
+
+                <!-- Tablet Color Picker Popup -->
+                <div v-if="tabletColorPickerOpen" class="tablet-color-picker-popup" @click.stop>
+                    <div class="tablet-color-picker-header">
+                        <span>{{ tabletColorPickerTarget === 'fg' ? 'Foreground' : 'Background' }} Color</span>
+                        <button class="tablet-color-picker-close" @click="tabletColorPickerOpen = false">&times;</button>
+                    </div>
+                    <div class="tablet-color-picker-body">
+                        <!-- Current color preview with native picker -->
+                        <div class="tablet-color-current">
+                            <div class="tablet-color-preview"
+                                :style="{ backgroundColor: tabletColorPickerTarget === 'fg' ? fgColor : bgColor }">
+                                <input type="color"
+                                    :value="tabletColorPickerTarget === 'fg' ? fgColor : bgColor"
+                                    @input="setTabletPickerColor($event.target.value)"
+                                    class="tablet-color-native-input">
+                            </div>
+                            <div class="tablet-color-hex-input">
+                                <input type="text" v-model="hexInput" @keyup.enter="applyTabletHexColor" placeholder="#RRGGBB">
+                                <button @click="applyTabletHexColor">Set</button>
+                            </div>
+                        </div>
+
+                        <!-- Recent colors -->
+                        <div class="tablet-color-section" v-if="recentColors.length > 0">
+                            <div class="tablet-color-section-label">Recent</div>
+                            <div class="tablet-color-grid">
+                                <div v-for="(color, idx) in recentColors" :key="'recent-'+idx"
+                                    class="tablet-color-cell"
+                                    :style="{ backgroundColor: color }"
+                                    @click="setTabletPickerColor(color)"></div>
+                            </div>
+                        </div>
+
+                        <!-- Common colors (large touch-friendly swatches) -->
+                        <div class="tablet-color-section">
+                            <div class="tablet-color-section-label">Common</div>
+                            <div class="tablet-color-grid">
+                                <div v-for="(color, idx) in commonColors" :key="'common-'+idx"
+                                    class="tablet-color-cell"
+                                    :style="{ backgroundColor: color }"
+                                    @click="setTabletPickerColor(color)"></div>
+                            </div>
+                        </div>
+
+                        <!-- Extended palette -->
+                        <div class="tablet-color-section">
+                            <div class="tablet-color-section-label">Palette</div>
+                            <div class="tablet-color-grid extended">
+                                <div v-for="(color, idx) in extendedColors" :key="'ext-'+idx"
+                                    class="tablet-color-cell small"
+                                    :style="{ backgroundColor: color }"
+                                    @click="setTabletPickerColor(color)"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </template>
 
             <!-- ==================== LIMITED MODE UI ==================== -->
@@ -761,9 +818,9 @@ export default {
                 <div class="tablet-color-controls">
                     <div class="tablet-color-swatches">
                         <div class="tablet-color-btn fg" :style="{ backgroundColor: fgColor }"
-                            @click="openColorPicker('fg', $event)" title="Foreground Color"></div>
+                            @click.stop="openTabletColorPicker('fg')" title="Foreground Color"></div>
                         <div class="tablet-color-btn bg" :style="{ backgroundColor: bgColor }"
-                            @click="openColorPicker('bg', $event)" title="Background Color"></div>
+                            @click.stop="openTabletColorPicker('bg')" title="Background Color"></div>
                     </div>
                     <button class="tablet-icon-btn" @click="swapColors" title="Swap Colors (X)">&#8633;</button>
                     <button class="tablet-icon-btn" @click="resetColors" title="Reset Colors (D)">
@@ -1113,6 +1170,8 @@ export default {
             tabletFilterTab: 'blur',         // Active filter category tab
             tabletImageMenuOpen: false,
             tabletZoomMenuOpen: false,       // Zoom menu popup open
+            tabletColorPickerOpen: false,    // Tablet color picker popup
+            tabletColorPickerTarget: 'fg',   // 'fg' or 'bg'
 
             // Filter preview system
             filterPreviews: {},              // Cache: { filterId: base64ImageData }
@@ -1742,12 +1801,14 @@ export default {
 
                 const sourcesResponse = await fetch(`${this.apiBase}/images/sources`);
                 if (sourcesResponse.ok) {
-                    const sources = await sourcesResponse.json();
+                    const sourcesData = await sourcesResponse.json();
+                    const sources = sourcesData.sources || [];
                     // Load images from all sources
                     for (const source of sources) {
                         const imagesResponse = await fetch(`${this.apiBase}/images/${source.id}`);
                         if (imagesResponse.ok) {
-                            const images = await imagesResponse.json();
+                            const imagesData = await imagesResponse.json();
+                            const images = imagesData.images || [];
                             // Store for File menu (first source only)
                             if (!this.sampleImages.length) {
                                 this.sampleImages = images.map(img => ({
@@ -1932,6 +1993,37 @@ export default {
                 this.setBackgroundColor(color);
             }
             this.hexInput = color;
+        },
+
+        // Tablet color picker methods
+        openTabletColorPicker(target) {
+            // Close other menus first
+            this.tabletFileMenuOpen = false;
+            this.tabletEditMenuOpen = false;
+            this.tabletViewMenuOpen = false;
+            this.tabletImageMenuOpen = false;
+            this.tabletZoomMenuOpen = false;
+
+            this.tabletColorPickerTarget = target;
+            this.hexInput = target === 'fg' ? this.fgColor : this.bgColor;
+            this.tabletColorPickerOpen = true;
+        },
+
+        setTabletPickerColor(color) {
+            if (this.tabletColorPickerTarget === 'fg') {
+                this.setForegroundColor(color);
+            } else {
+                this.setBackgroundColor(color);
+            }
+            this.hexInput = color;
+        },
+
+        applyTabletHexColor() {
+            let hex = this.hexInput.trim();
+            if (!hex.startsWith('#')) hex = '#' + hex;
+            if (/^#[0-9A-Fa-f]{6}$/.test(hex)) {
+                this.setTabletPickerColor(hex);
+            }
         },
 
         // History methods
@@ -2170,13 +2262,14 @@ export default {
         },
 
         toggleTabletPopup(which) {
-            // Close all other popups first
+            // Close all other popups first (including color picker)
             const popups = ['file', 'edit', 'view', 'image', 'zoom'];
             for (const p of popups) {
                 if (p !== which) {
                     this[`tablet${p.charAt(0).toUpperCase() + p.slice(1)}MenuOpen`] = false;
                 }
             }
+            this.tabletColorPickerOpen = false;
 
             // Toggle the requested popup
             switch (which) {
@@ -2212,6 +2305,7 @@ export default {
             this.tabletViewMenuOpen = false;
             this.tabletImageMenuOpen = false;
             this.tabletZoomMenuOpen = false;
+            this.tabletColorPickerOpen = false;
 
             // Close non-pinned panels/drawers
             this.closeAllPanels();
@@ -2572,15 +2666,6 @@ export default {
         openLimitedColorPicker() {
             // Open color picker in limited mode
             this.openColorPicker('fg', { target: { getBoundingClientRect: () => ({ left: 16, bottom: 150 }) } });
-        },
-
-        setForegroundColor(color) {
-            this.fgColor = color;
-            const app = this.getState();
-            if (app) {
-                app.foregroundColor = color;
-            }
-            this.addRecentColor(color);
         },
 
         // Tablet mode methods
@@ -3245,7 +3330,7 @@ export default {
             app.history.finishState();
 
             // Update layers display
-            this.updateLayers();
+            this.updateLayerList();
 
             // Call the callback
             const callback = this.rasterizeCallback;
@@ -3866,13 +3951,15 @@ export default {
                 // Check if click is inside other menus
                 const menuBar = event.target.closest('.menu-bar');
                 const colorPicker = event.target.closest('.color-picker-popup');
-                if (menuBar || colorPicker) {
+                const tabletColorPicker = event.target.closest('.tablet-color-picker-popup');
+                if (menuBar || colorPicker || tabletColorPicker) {
                     return;
                 }
             }
 
             this.activeMenu = null;
             this.colorPickerVisible = false;
+            this.tabletColorPickerOpen = false;
             this.showBrushPresetMenu = false;
         },
 

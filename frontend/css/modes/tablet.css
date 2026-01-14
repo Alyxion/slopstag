@@ -1551,3 +1551,173 @@
     display: block;
     cursor: crosshair;
 }
+
+/* ==================== Tablet Color Picker ==================== */
+[data-mode="tablet"] .tablet-color-picker-popup {
+    position: fixed;
+    bottom: calc(var(--tablet-bottom-bar-height) + 16px);
+    right: 16px;
+    width: 320px;
+    max-height: 70vh;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--tablet-radius);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    z-index: 500;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+[data-mode="tablet"] .tablet-color-picker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--bg-dark);
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+    font-size: 14px;
+}
+
+[data-mode="tablet"] .tablet-color-picker-close {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 20px;
+    cursor: pointer;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+[data-mode="tablet"] .tablet-color-picker-close:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+[data-mode="tablet"] .tablet-color-picker-body {
+    padding: 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* Current color preview with native picker */
+[data-mode="tablet"] .tablet-color-current {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+}
+
+[data-mode="tablet"] .tablet-color-preview {
+    width: 80px;
+    height: 80px;
+    border-radius: 8px;
+    border: 2px solid var(--border);
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+[data-mode="tablet"] .tablet-color-native-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+[data-mode="tablet"] .tablet-color-hex-input {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+[data-mode="tablet"] .tablet-color-hex-input input[type="text"] {
+    flex: 1;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    font-size: 16px;
+    font-family: monospace;
+    text-transform: uppercase;
+}
+
+[data-mode="tablet"] .tablet-color-hex-input button {
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: white;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+[data-mode="tablet"] .tablet-color-hex-input button:hover {
+    background: var(--accent-hover);
+}
+
+/* Color sections */
+[data-mode="tablet"] .tablet-color-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+[data-mode="tablet"] .tablet-color-section-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Color grid */
+[data-mode="tablet"] .tablet-color-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+}
+
+[data-mode="tablet"] .tablet-color-grid.extended {
+    grid-template-columns: repeat(12, 1fr);
+    gap: 4px;
+}
+
+[data-mode="tablet"] .tablet-color-cell {
+    aspect-ratio: 1;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: transform 0.1s, border-color 0.1s;
+    min-height: 40px;
+}
+
+[data-mode="tablet"] .tablet-color-cell:hover {
+    transform: scale(1.1);
+    border-color: var(--text-primary);
+}
+
+[data-mode="tablet"] .tablet-color-cell:active {
+    transform: scale(0.95);
+}
+
+[data-mode="tablet"] .tablet-color-cell.small {
+    min-height: 24px;
+    border-radius: 4px;
+    border-width: 1px;
+}
+
+[data-mode="tablet"] .tablet-color-cell.small:hover {
+    transform: scale(1.15);
+}
