@@ -183,6 +183,7 @@ export class History {
     /**
      * Begin capturing changes for a new history entry.
      * Call this BEFORE modifying any pixels.
+     * Uses deferred capture for better performance when bounds are unknown.
      *
      * @param {string} action - Description of the action
      * @param {string[]} layerIds - IDs of layers that will be affected
@@ -205,32 +206,45 @@ export class History {
             const layer = this.app.layerStack.getLayerById(layerId);
             if (!layer) continue;
 
-            // Use provided bounds or full layer
-            const captureBounds = bounds ? {
-                x: Math.max(0, Math.floor(bounds.x)),
-                y: Math.max(0, Math.floor(bounds.y)),
-                width: Math.min(layer.width - Math.max(0, Math.floor(bounds.x)), Math.ceil(bounds.width)),
-                height: Math.min(layer.height - Math.max(0, Math.floor(bounds.y)), Math.ceil(bounds.height))
-            } : {
-                x: 0,
-                y: 0,
-                width: layer.width,
-                height: layer.height
-            };
+            if (bounds) {
+                // With known bounds, capture just that region immediately
+                const captureBounds = {
+                    x: Math.max(0, Math.floor(bounds.x)),
+                    y: Math.max(0, Math.floor(bounds.y)),
+                    width: Math.min(layer.width - Math.max(0, Math.floor(bounds.x)), Math.ceil(bounds.width)),
+                    height: Math.min(layer.height - Math.max(0, Math.floor(bounds.y)), Math.ceil(bounds.height))
+                };
 
-            // Clamp bounds to valid range
-            if (captureBounds.width <= 0 || captureBounds.height <= 0) continue;
+                if (captureBounds.width <= 0 || captureBounds.height <= 0) continue;
 
-            const beforeData = layer.ctx.getImageData(
-                captureBounds.x, captureBounds.y,
-                captureBounds.width, captureBounds.height
-            );
+                const beforeData = layer.ctx.getImageData(
+                    captureBounds.x, captureBounds.y,
+                    captureBounds.width, captureBounds.height
+                );
 
-            this.currentCapture.layers.set(layerId, {
-                bounds: captureBounds,
-                beforeData: beforeData,
-                originalBounds: { ...captureBounds } // Keep original for expansion
-            });
+                this.currentCapture.layers.set(layerId, {
+                    bounds: captureBounds,
+                    beforeData: beforeData,
+                    originalBounds: { ...captureBounds },
+                    snapshotCanvas: null
+                });
+            } else {
+                // Deferred capture: create a canvas snapshot (GPU-accelerated via drawImage)
+                // instead of copying all pixel data immediately with getImageData.
+                // This is much faster for large canvases.
+                const snapshotCanvas = document.createElement('canvas');
+                snapshotCanvas.width = layer.width;
+                snapshotCanvas.height = layer.height;
+                const snapshotCtx = snapshotCanvas.getContext('2d');
+                snapshotCtx.drawImage(layer.canvas, 0, 0);
+
+                this.currentCapture.layers.set(layerId, {
+                    bounds: { x: 0, y: 0, width: layer.width, height: layer.height },
+                    beforeData: null,  // Will be extracted from snapshot on commit
+                    originalBounds: { x: 0, y: 0, width: layer.width, height: layer.height },
+                    snapshotCanvas: snapshotCanvas
+                });
+            }
         }
     }
 
@@ -360,13 +374,28 @@ export class History {
                 bounds.width, bounds.height
             );
 
+            // Get beforeData - either from direct capture or from deferred snapshot
+            let beforeData = data.beforeData;
+            if (!beforeData && data.snapshotCanvas) {
+                // Deferred capture: extract beforeData from snapshot now
+                const snapshotCtx = data.snapshotCanvas.getContext('2d');
+                beforeData = snapshotCtx.getImageData(
+                    bounds.x, bounds.y,
+                    bounds.width, bounds.height
+                );
+                // Clean up snapshot canvas
+                data.snapshotCanvas = null;
+            }
+
+            if (!beforeData) continue;
+
             // Only create patch if pixels actually changed
-            if (!this.imageDataEquals(data.beforeData, afterData)) {
+            if (!this.imageDataEquals(beforeData, afterData)) {
                 // Optionally shrink bounds to actual changes
-                const tightBounds = this.shrinkToChanges(data.beforeData, afterData, bounds);
+                const tightBounds = this.shrinkToChanges(beforeData, afterData, bounds);
 
                 if (tightBounds) {
-                    const tightBefore = this.extractRegion(data.beforeData, bounds, tightBounds);
+                    const tightBefore = this.extractRegion(beforeData, bounds, tightBounds);
                     const tightAfter = this.extractRegion(afterData, bounds, tightBounds);
 
                     const patch = new HistoryPatch(

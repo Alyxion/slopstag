@@ -37,7 +37,16 @@ export class Renderer {
         // Render loop
         this.needsRender = true;
         this.animationFrameId = null;
+        this.onRenderCallback = null;  // Callback after render completes
         this.startRenderLoop();
+    }
+
+    /**
+     * Set a callback to be called after each render.
+     * @param {Function} callback
+     */
+    setOnRender(callback) {
+        this.onRenderCallback = callback;
     }
 
     /**
@@ -222,6 +231,10 @@ export class Renderer {
             if (this.needsRender) {
                 this.render();
                 this.needsRender = false;
+                // Call render callback if set
+                if (this.onRenderCallback) {
+                    this.onRenderCallback();
+                }
             }
             this.animationFrameId = requestAnimationFrame(loop);
         };

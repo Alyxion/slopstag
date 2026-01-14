@@ -1,13 +1,71 @@
 """Filter API endpoints."""
 
+import base64
+import io
 import json
 import struct
+from functools import lru_cache
 
+import numpy as np
 from fastapi import APIRouter, HTTPException, Request, Response
+from PIL import Image
 
 from ..filters.registry import filter_registry
 
 router = APIRouter()
+
+# Cache for filter previews - stores base64 PNG data
+_preview_cache: dict[str, str] = {}
+
+# Sample image for filter previews (96x96 with various features to show filter effects)
+@lru_cache(maxsize=1)
+def _get_sample_image() -> np.ndarray:
+    """Generate a sample image for filter previews.
+
+    Creates a 96x96 RGBA image with:
+    - Gradient background
+    - Some geometric shapes
+    - Areas of different colors for demonstrating color effects
+    """
+    size = 96
+    img = np.zeros((size, size, 4), dtype=np.uint8)
+
+    # Create a gradient background (blue to orange)
+    for y in range(size):
+        for x in range(size):
+            t = x / size
+            r = int(50 + 180 * t)
+            g = int(100 + 80 * (1 - abs(t - 0.5) * 2))
+            b = int(200 * (1 - t))
+            img[y, x] = [r, g, b, 255]
+
+    # Add a white circle in the center
+    cy, cx = size // 2, size // 2
+    radius = size // 4
+    for y in range(size):
+        for x in range(size):
+            dist = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
+            if dist < radius:
+                img[y, x] = [255, 255, 255, 255]
+            elif dist < radius + 2:
+                # Soft edge
+                alpha = 1 - (dist - radius) / 2
+                img[y, x] = [
+                    int(255 * alpha + img[y, x, 0] * (1 - alpha)),
+                    int(255 * alpha + img[y, x, 1] * (1 - alpha)),
+                    int(255 * alpha + img[y, x, 2] * (1 - alpha)),
+                    255,
+                ]
+
+    # Add a dark rectangle in corner
+    img[10:30, 10:40] = [40, 40, 50, 255]
+
+    # Add colored squares
+    img[70:90, 10:30] = [255, 50, 50, 255]  # Red
+    img[70:90, 35:55] = [50, 255, 50, 255]  # Green
+    img[70:90, 60:80] = [50, 50, 255, 255]  # Blue
+
+    return img
 
 
 @router.get("")
@@ -109,3 +167,91 @@ async def apply_filter(filter_id: str, request: Request):
 
     # Return raw RGBA bytes
     return Response(content=result.tobytes(), media_type="application/octet-stream")
+
+
+@router.get("/{filter_id}/preview")
+async def get_filter_preview(filter_id: str):
+    """Get a preview thumbnail of a filter applied to a sample image.
+
+    Returns a JSON object with a base64-encoded PNG thumbnail showing
+    the filter effect on a sample image. Results are cached for performance.
+    """
+    if filter_id not in filter_registry:
+        raise HTTPException(status_code=404, detail=f"Filter not found: {filter_id}")
+
+    # Check cache first
+    if filter_id in _preview_cache:
+        return {"preview": _preview_cache[filter_id]}
+
+    # Get sample image
+    sample = _get_sample_image().copy()
+
+    # Apply filter with default parameters
+    filter_instance = filter_registry[filter_id]()
+    try:
+        result = filter_instance.apply(sample)
+    except Exception as e:
+        # If filter fails with defaults, return sample image as preview
+        print(f"Filter preview error for {filter_id}: {e}")
+        result = sample
+
+    # Ensure result is valid
+    if result is None or result.shape != sample.shape:
+        result = sample
+
+    # Convert to PNG and base64 encode
+    pil_img = Image.fromarray(result)
+    buffer = io.BytesIO()
+    pil_img.save(buffer, format="PNG")
+    buffer.seek(0)
+    base64_data = base64.b64encode(buffer.getvalue()).decode("utf-8")
+    data_url = f"data:image/png;base64,{base64_data}"
+
+    # Cache the result
+    _preview_cache[filter_id] = data_url
+
+    return {"preview": data_url}
+
+
+@router.get("/previews/all")
+async def get_all_filter_previews():
+    """Get preview thumbnails for all filters.
+
+    Returns a JSON object mapping filter IDs to base64-encoded PNG thumbnails.
+    This is useful for loading all previews at once.
+    """
+    previews = {}
+
+    for filter_id in filter_registry:
+        # Check cache first
+        if filter_id in _preview_cache:
+            previews[filter_id] = _preview_cache[filter_id]
+            continue
+
+        # Get sample image
+        sample = _get_sample_image().copy()
+
+        # Apply filter with default parameters
+        filter_instance = filter_registry[filter_id]()
+        try:
+            result = filter_instance.apply(sample)
+        except Exception:
+            result = sample
+
+        # Ensure result is valid
+        if result is None or result.shape != sample.shape:
+            result = sample
+
+        # Convert to PNG and base64 encode
+        pil_img = Image.fromarray(result)
+        buffer = io.BytesIO()
+        pil_img.save(buffer, format="PNG")
+        buffer.seek(0)
+        base64_data = base64.b64encode(buffer.getvalue()).decode("utf-8")
+        data_url = f"data:image/png;base64,{base64_data}"
+
+        # Cache and add to result
+        _preview_cache[filter_id] = data_url
+        previews[filter_id] = data_url
+
+    return {"previews": previews}

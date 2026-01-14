@@ -14,75 +14,120 @@ export default {
 
             <!-- ==================== TABLET MODE UI ==================== -->
             <template v-if="currentUIMode === 'tablet'">
-                <!-- Tablet Top Bar -->
+                <!-- Tablet Top Bar - Icon buttons with labels -->
                 <div class="tablet-top-bar">
-                    <div class="tablet-action-group">
-                        <button class="tablet-menu-btn" @click="tabletLeftDrawerOpen = !tabletLeftDrawerOpen"
-                            :class="{ active: tabletLeftDrawerOpen }" title="Tools">
-                            <span v-html="getToolIcon('tools')"></span>
-                        </button>
-                        <button class="tablet-menu-btn" @click="showTabletMenu" title="Menu">
-                            <span v-html="getToolIcon('menu')"></span>
-                        </button>
-                    </div>
-                    <div class="tablet-action-group">
-                        <button class="tablet-menu-btn" @click="undo" :disabled="!canUndo" title="Undo">
-                            <span v-html="getToolIcon('undo')"></span>
-                        </button>
-                        <button class="tablet-menu-btn" @click="redo" :disabled="!canRedo" title="Redo">
-                            <span v-html="getToolIcon('redo')"></span>
-                        </button>
-                    </div>
-                    <span class="tablet-title">{{ documentTabs.find(d => d.isActive)?.name || 'Slopstag' }}</span>
-                    <div class="tablet-action-group">
-                        <button class="tablet-menu-btn" @click="showTabletZoomMenu" title="Zoom: {{ Math.round(zoom * 100) }}%">
-                            <span style="font-size: 14px; font-weight: 600;">{{ Math.round(zoom * 100) }}%</span>
-                        </button>
-                    </div>
-                    <div class="tablet-action-group">
-                        <button class="tablet-menu-btn" @click="tabletRightDrawerOpen = !tabletRightDrawerOpen"
-                            :class="{ active: tabletRightDrawerOpen }" title="Panels">
-                            <span v-html="getToolIcon('panels')"></span>
-                        </button>
-                    </div>
+                    <!-- Tools button -->
+                    <button class="tablet-icon-btn" @click="tabletLeftDrawerOpen = !tabletLeftDrawerOpen"
+                        :class="{ active: tabletLeftDrawerOpen }">
+                        <span class="tablet-icon-btn-icon" v-html="getToolIcon('tools')"></span>
+                        <span class="tablet-icon-btn-label">Tools</span>
+                    </button>
+
+                    <!-- File menu -->
+                    <button class="tablet-icon-btn" @click="toggleTabletPopup('file')"
+                        :class="{ active: tabletFileMenuOpen }">
+                        <span class="tablet-icon-btn-icon" v-html="getToolIcon('file')"></span>
+                        <span class="tablet-icon-btn-label">File</span>
+                    </button>
+
+                    <!-- Edit menu -->
+                    <button class="tablet-icon-btn" @click="toggleTabletPopup('edit')"
+                        :class="{ active: tabletEditMenuOpen }">
+                        <span class="tablet-icon-btn-icon" v-html="getToolIcon('edit')"></span>
+                        <span class="tablet-icon-btn-label">Edit</span>
+                    </button>
+
+                    <!-- View menu -->
+                    <button class="tablet-icon-btn" @click="toggleTabletPopup('view')"
+                        :class="{ active: tabletViewMenuOpen }">
+                        <span class="tablet-icon-btn-icon" v-html="getToolIcon('view')"></span>
+                        <span class="tablet-icon-btn-label">View</span>
+                    </button>
+
+                    <!-- Filters panel button -->
+                    <button class="tablet-icon-btn" @click="toggleTabletPopup('filter')"
+                        :class="{ active: tabletFilterPanelOpen }">
+                        <span class="tablet-icon-btn-icon" v-html="getToolIcon('filter')"></span>
+                        <span class="tablet-icon-btn-label">Filter</span>
+                    </button>
+
+                    <!-- Image menu -->
+                    <button class="tablet-icon-btn" @click="toggleTabletPopup('image')"
+                        :class="{ active: tabletImageMenuOpen }">
+                        <span class="tablet-icon-btn-icon" v-html="getToolIcon('image')"></span>
+                        <span class="tablet-icon-btn-label">Image</span>
+                    </button>
+
+                    <!-- Title (flexible space) -->
+                    <span class="tablet-title-spacer"></span>
+
+                    <!-- Undo/Redo -->
+                    <button class="tablet-icon-btn" @click="undo" :disabled="!canUndo">
+                        <span class="tablet-icon-btn-icon" v-html="getToolIcon('undo')"></span>
+                        <span class="tablet-icon-btn-label">Undo</span>
+                    </button>
+                    <button class="tablet-icon-btn" @click="redo" :disabled="!canRedo">
+                        <span class="tablet-icon-btn-icon" v-html="getToolIcon('redo')"></span>
+                        <span class="tablet-icon-btn-label">Redo</span>
+                    </button>
+
+                    <!-- Deselect (only show if selection exists) -->
+                    <button class="tablet-icon-btn" v-if="hasSelection" @click="tabletMenuAction('deselect')">
+                        <span class="tablet-icon-btn-icon" v-html="getToolIcon('deselect')"></span>
+                        <span class="tablet-icon-btn-label">Deselect</span>
+                    </button>
+
+                    <!-- Zoom -->
+                    <button class="tablet-icon-btn" @click="toggleTabletPopup('zoom')">
+                        <span class="tablet-icon-btn-icon">{{ Math.round(zoom * 100) }}%</span>
+                        <span class="tablet-icon-btn-label">Zoom</span>
+                    </button>
                 </div>
 
-                <!-- Left Drawer - Tools -->
-                <div class="tablet-drawer left" :class="{ open: tabletLeftDrawerOpen }">
-                    <div class="tablet-drawer-header">
-                        <span class="tablet-drawer-title">Tools</span>
-                        <button class="tablet-panel-close" @click="tabletLeftDrawerOpen = false">&times;</button>
-                    </div>
-                    <div class="tablet-drawer-content">
-                        <div class="tablet-tool-grid">
-                            <button v-for="tool in tabletAllTools" :key="tool.id"
-                                class="tablet-tool-btn-large"
-                                :class="{ active: currentToolId === tool.id }"
-                                :title="tool.name"
-                                @click="selectTool(tool.id)">
-                                <span class="tablet-tool-icon" v-html="getToolIcon(tool.icon)"></span>
-                                <span class="tablet-tool-label">{{ tool.name }}</span>
+                <!-- ==================== LEFT DOCK (Tools) ==================== -->
+                <div class="tablet-dock-stack left">
+                    <div class="tablet-dock-panel" v-if="tabletLeftDrawerOpen">
+                        <div class="tablet-panel-header">
+                            <button class="tablet-panel-icon-close" @click="tabletLeftDrawerOpen = false">
+                                <span v-html="getToolIcon('tools')"></span>
                             </button>
+                            <span class="tablet-panel-title">Tools</span>
+                        </div>
+                        <div class="tablet-panel-content">
+                            <div class="tablet-tool-grid">
+                                <button v-for="(tool, index) in tabletAllTools" :key="tool.id"
+                                    class="tablet-tool-btn-large"
+                                    :class="{ active: currentToolId === tool.id, 'drag-over': toolDragOverIndex === index }"
+                                    :title="tool.name"
+                                    draggable="true"
+                                    @click="selectTool(tool.id)"
+                                    @dragstart="onToolDragStart(index, $event)"
+                                    @dragover.prevent="onToolDragOver(index, $event)"
+                                    @dragleave="onToolDragLeave"
+                                    @drop.prevent="onToolDrop(index)"
+                                    @dragend="onToolDragEnd">
+                                    <span class="tablet-tool-icon" v-html="getToolIcon(tool.icon)"></span>
+                                    <span class="tablet-tool-label">{{ tool.name }}</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
+                    <button class="tablet-dock-icon" v-if="!tabletLeftDrawerOpen" @click="tabletLeftDrawerOpen = true">
+                        <span v-html="getToolIcon('tools')"></span>
+                    </button>
                 </div>
 
-                <!-- Right Drawer - Panels (Navigator, Layers, History) -->
-                <div class="tablet-drawer right" :class="{ open: tabletRightDrawerOpen }">
-                    <div class="tablet-drawer-header">
-                        <div class="tablet-drawer-tabs">
-                            <button class="tablet-drawer-tab" :class="{ active: tabletRightTab === 'navigator' }"
-                                @click="tabletRightTab = 'navigator'">Navigator</button>
-                            <button class="tablet-drawer-tab" :class="{ active: tabletRightTab === 'layers' }"
-                                @click="tabletRightTab = 'layers'">Layers</button>
-                            <button class="tablet-drawer-tab" :class="{ active: tabletRightTab === 'history' }"
-                                @click="tabletRightTab = 'history'">History</button>
+                <!-- ==================== RIGHT DOCK (Nav, Layers, History) ==================== -->
+                <div class="tablet-dock-stack right">
+                    <!-- Navigator: Panel or Icon -->
+                    <div class="tablet-dock-panel" v-if="tabletNavPanelOpen" ref="sidePanelNav">
+                        <div class="tablet-panel-header">
+                            <button class="tablet-panel-icon-close" @click="toggleSidePanel('nav')">
+                                <span v-html="getToolIcon('navigator')"></span>
+                            </button>
+                            <span class="tablet-panel-title">Navigator</span>
                         </div>
-                        <button class="tablet-panel-close" @click="tabletRightDrawerOpen = false">&times;</button>
-                    </div>
-                    <div class="tablet-drawer-content">
-                        <!-- Navigator Tab -->
-                        <div v-show="tabletRightTab === 'navigator'" class="tablet-tab-content">
+                        <div class="tablet-panel-content">
                             <canvas ref="tabletNavigatorCanvas" class="tablet-navigator-canvas"
                                 @mousedown="navigatorMouseDown" @mousemove="navigatorMouseMove"
                                 @mouseup="navigatorMouseUp" @mouseleave="navigatorMouseUp"
@@ -96,9 +141,20 @@ export default {
                                 <button class="tablet-btn tablet-btn-secondary" @click="fitToWindow">Fit</button>
                             </div>
                         </div>
+                    </div>
+                    <button class="tablet-dock-icon" v-if="!tabletNavPanelOpen" @click="toggleSidePanel('nav')">
+                        <span v-html="getToolIcon('navigator')"></span>
+                    </button>
 
-                        <!-- Layers Tab -->
-                        <div v-show="tabletRightTab === 'layers'" class="tablet-tab-content">
+                    <!-- Layers: Panel or Icon -->
+                    <div class="tablet-dock-panel" v-if="tabletLayersPanelOpen" ref="sidePanelLayers">
+                        <div class="tablet-panel-header">
+                            <button class="tablet-panel-icon-close" @click="toggleSidePanel('layers')">
+                                <span v-html="getToolIcon('layers')"></span>
+                            </button>
+                            <span class="tablet-panel-title">Layers</span>
+                        </div>
+                        <div class="tablet-panel-content">
                             <div class="tablet-layers-list">
                                 <div v-for="layer in reversedLayers" :key="layer.id" class="tablet-layer-item"
                                     :class="{ active: layer.id === activeLayerId }" @click="selectLayer(layer.id)">
@@ -115,16 +171,16 @@ export default {
                             </div>
                             <div class="tablet-layer-actions">
                                 <button class="tablet-btn tablet-btn-primary" @click="addLayer">+ New</button>
-                                <button class="tablet-btn tablet-btn-secondary" @click="duplicateLayer">Duplicate</button>
-                                <button class="tablet-btn tablet-btn-secondary" @click="deleteLayer">Delete</button>
+                                <button class="tablet-btn tablet-btn-secondary" @click="duplicateLayer">Dup</button>
+                                <button class="tablet-btn tablet-btn-secondary" @click="deleteLayer">Del</button>
                                 <button class="tablet-btn tablet-btn-secondary" @click="mergeDown">Merge</button>
                             </div>
                             <div class="tablet-layer-props" v-if="activeLayerId">
                                 <div class="tablet-prop-row">
                                     <label>Opacity</label>
-                                    <input type="range" min="0" max="100" :value="Math.round(activeLayerOpacity * 100)"
-                                        @input="updateLayerOpacity($event.target.value / 100)">
-                                    <span>{{ Math.round(activeLayerOpacity * 100) }}%</span>
+                                    <input type="range" min="0" max="100" :value="activeLayerOpacity"
+                                        @input="updateLayerOpacity(Number($event.target.value))">
+                                    <span>{{ activeLayerOpacity }}%</span>
                                 </div>
                                 <div class="tablet-prop-row">
                                     <label>Blend</label>
@@ -134,58 +190,141 @@ export default {
                                 </div>
                             </div>
                         </div>
+                    </div>
+                    <button class="tablet-dock-icon" v-if="!tabletLayersPanelOpen" @click="toggleSidePanel('layers')">
+                        <span v-html="getToolIcon('layers')"></span>
+                    </button>
 
-                        <!-- History Tab -->
-                        <div v-show="tabletRightTab === 'history'" class="tablet-tab-content">
+                    <!-- History: Panel or Icon -->
+                    <div class="tablet-dock-panel" v-if="tabletHistoryPanelOpen" ref="sidePanelHistory">
+                        <div class="tablet-panel-header">
+                            <button class="tablet-panel-icon-close" @click="toggleSidePanel('history')">
+                                <span v-html="getToolIcon('history')"></span>
+                            </button>
+                            <span class="tablet-panel-title">History</span>
+                        </div>
+                        <div class="tablet-panel-content">
                             <div class="tablet-history-list">
                                 <div v-for="(item, idx) in historyList" :key="idx" class="tablet-history-item"
                                     :class="{ active: idx === historyIndex, future: idx > historyIndex }"
-                                    @click="goToHistoryState(idx)">
+                                    @click="jumpToHistory(idx)">
                                     <span class="tablet-history-icon">{{ idx > historyIndex ? '○' : '●' }}</span>
                                     <span class="tablet-history-name">{{ item.name }}</span>
                                 </div>
                             </div>
                         </div>
                     </div>
+                    <button class="tablet-dock-icon" v-if="!tabletHistoryPanelOpen" @click="toggleSidePanel('history')">
+                        <span v-html="getToolIcon('history')"></span>
+                    </button>
                 </div>
 
-                <!-- Drawer Overlay (tap to close) -->
-                <div class="tablet-drawer-overlay"
-                    :class="{ visible: tabletLeftDrawerOpen || tabletRightDrawerOpen }"
-                    @click="tabletLeftDrawerOpen = false; tabletRightDrawerOpen = false"></div>
-
-                <!-- Tablet Menu Popup -->
-                <div v-if="tabletMenuOpen" class="tablet-menu-popup" @click.stop>
-                    <div class="tablet-menu-section">
-                        <div class="tablet-menu-header">File</div>
-                        <button class="tablet-menu-item" @click="tabletMenuAction('new')">New Document</button>
-                        <button class="tablet-menu-item" @click="tabletMenuAction('export')">Export PNG</button>
+                <!-- ==================== FILTERS PANEL (Special tabbed panel with previews) ==================== -->
+                <div class="tablet-floating-panel filters-panel" :class="{ open: tabletFilterPanelOpen }"
+                    style="left: 50%; top: 70px; transform: translateX(-50%); width: 500px; max-height: 80vh;">
+                    <div class="tablet-panel-header">
+                        <span class="tablet-panel-title">Filters</span>
+                        <div class="tablet-panel-controls">
+                            <button class="tablet-panel-close" @click="tabletFilterPanelOpen = false">&times;</button>
+                        </div>
                     </div>
-                    <div class="tablet-menu-section">
-                        <div class="tablet-menu-header">Edit</div>
-                        <button class="tablet-menu-item" @click="tabletMenuAction('cut')">Cut</button>
-                        <button class="tablet-menu-item" @click="tabletMenuAction('copy')">Copy</button>
-                        <button class="tablet-menu-item" @click="tabletMenuAction('paste')">Paste</button>
-                        <button class="tablet-menu-item" @click="tabletMenuAction('selectAll')">Select All</button>
-                        <button class="tablet-menu-item" @click="tabletMenuAction('deselect')">Deselect</button>
-                    </div>
-                    <div class="tablet-menu-section">
-                        <div class="tablet-menu-header">Image</div>
-                        <button class="tablet-menu-item" @click="tabletMenuAction('flipH')">Flip Horizontal</button>
-                        <button class="tablet-menu-item" @click="tabletMenuAction('flipV')">Flip Vertical</button>
-                        <button class="tablet-menu-item" @click="tabletMenuAction('rotate90')">Rotate 90° CW</button>
-                        <button class="tablet-menu-item" @click="tabletMenuAction('rotate-90')">Rotate 90° CCW</button>
-                    </div>
-                    <div class="tablet-menu-section">
-                        <div class="tablet-menu-header">View</div>
-                        <button class="tablet-menu-item" @click="tabletMenuAction('desktop')">Switch to Desktop Mode</button>
-                        <button class="tablet-menu-item" @click="tabletMenuAction('toggleTheme')">
-                            {{ currentTheme === 'dark' ? 'Light Theme' : 'Dark Theme' }}
+                    <!-- Filter category tabs -->
+                    <div class="tablet-filter-tabs">
+                        <button v-for="cat in filterCategories" :key="cat"
+                            class="tablet-filter-tab" :class="{ active: tabletFilterTab === cat }"
+                            @click="switchFilterTab(cat)">
+                            {{ formatCategory(cat) }}
                         </button>
                     </div>
+                    <!-- Filter grid with previews -->
+                    <div class="tablet-panel-content tablet-filter-grid-container">
+                        <div class="tablet-filter-grid">
+                            <div v-for="f in filtersInCurrentTab" :key="f.id"
+                                class="tablet-filter-card" @click="openFilterDialog(f); tabletFilterPanelOpen = false">
+                                <div class="tablet-filter-preview">
+                                    <img v-if="filterPreviews[f.id]" :src="filterPreviews[f.id]" class="tablet-filter-preview-img">
+                                    <div v-else-if="filterPreviewsLoading[f.id]" class="tablet-filter-loading">Loading...</div>
+                                    <div v-else class="tablet-filter-placeholder" @click.stop="loadFilterPreview(f.id)">
+                                        <span v-html="getToolIcon('filter')"></span>
+                                    </div>
+                                </div>
+                                <div class="tablet-filter-name">{{ f.name }}</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Tablet Zoom Menu Popup -->
+                <!-- Drawer Overlay (tap to close non-pinned elements) -->
+                <div class="tablet-drawer-overlay"
+                    :class="{ visible: hasOpenUnpinnedPopup }"
+                    @click="closeAllTabletPopups"></div>
+
+                <!-- ==================== INDIVIDUAL MENU POPUPS ==================== -->
+
+                <!-- File Menu Popup -->
+                <div v-if="tabletFileMenuOpen" class="tablet-menu-popup file-menu" @click.stop>
+                    <button class="tablet-menu-item" @click="tabletMenuAction('new')">New Document...</button>
+                    <div class="tablet-menu-divider"></div>
+                    <div class="tablet-menu-subheader">Load Sample Image</div>
+                    <button class="tablet-menu-item" v-for="img in sampleImages" :key="img.id"
+                        @click="tabletMenuAction('loadSample', img)">{{ img.name }}</button>
+                    <div class="tablet-menu-divider"></div>
+                    <button class="tablet-menu-item" @click="tabletMenuAction('export')">Export PNG</button>
+                </div>
+
+                <!-- Edit Menu Popup -->
+                <div v-if="tabletEditMenuOpen" class="tablet-menu-popup edit-menu" @click.stop>
+                    <button class="tablet-menu-item" @click="tabletMenuAction('undo')" :disabled="!canUndo">
+                        Undo{{ lastUndoAction ? ' ' + lastUndoAction : '' }}
+                    </button>
+                    <button class="tablet-menu-item" @click="tabletMenuAction('redo')" :disabled="!canRedo">
+                        Redo{{ lastRedoAction ? ' ' + lastRedoAction : '' }}
+                    </button>
+                    <div class="tablet-menu-divider"></div>
+                    <button class="tablet-menu-item" @click="tabletMenuAction('cut')">Cut</button>
+                    <button class="tablet-menu-item" @click="tabletMenuAction('copy')">Copy</button>
+                    <button class="tablet-menu-item" @click="tabletMenuAction('paste')">Paste</button>
+                    <button class="tablet-menu-item" @click="tabletMenuAction('pasteInPlace')">Paste in Place</button>
+                    <div class="tablet-menu-divider"></div>
+                    <button class="tablet-menu-item" @click="tabletMenuAction('selectAll')">Select All</button>
+                    <button class="tablet-menu-item" @click="tabletMenuAction('deselect')">Deselect</button>
+                </div>
+
+                <!-- View Menu Popup -->
+                <div v-if="tabletViewMenuOpen" class="tablet-menu-popup view-menu" @click.stop>
+                    <div class="tablet-menu-subheader">Panels</div>
+                    <button class="tablet-menu-item tablet-menu-toggle" @click="tabletLeftDrawerOpen = !tabletLeftDrawerOpen">
+                        <span class="tablet-menu-check">{{ tabletLeftDrawerOpen ? '✓' : '' }}</span>
+                        Tools Drawer
+                    </button>
+                    <button class="tablet-menu-item tablet-menu-toggle" @click="tabletFilterPanelOpen = !tabletFilterPanelOpen">
+                        <span class="tablet-menu-check">{{ tabletFilterPanelOpen ? '✓' : '' }}</span>
+                        Filters Panel
+                    </button>
+                    <div class="tablet-menu-divider"></div>
+                    <div class="tablet-menu-subheader">Theme</div>
+                    <button class="tablet-menu-item" @click="tabletMenuAction('toggleTheme')">
+                        {{ currentTheme === 'dark' ? 'Switch to Light' : 'Switch to Dark' }}
+                    </button>
+                    <div class="tablet-menu-divider"></div>
+                    <div class="tablet-menu-subheader">Mode</div>
+                    <button class="tablet-menu-item" @click="tabletMenuAction('desktop')">Desktop Mode</button>
+                    <button class="tablet-menu-item" @click="tabletMenuAction('limited')">Limited Mode</button>
+                </div>
+
+                <!-- Image Menu Popup -->
+                <div v-if="tabletImageMenuOpen" class="tablet-menu-popup image-menu" @click.stop>
+                    <div class="tablet-menu-subheader">Transform</div>
+                    <button class="tablet-menu-item" @click="tabletMenuAction('flipH')">Flip Horizontal</button>
+                    <button class="tablet-menu-item" @click="tabletMenuAction('flipV')">Flip Vertical</button>
+                    <button class="tablet-menu-item" @click="tabletMenuAction('rotate90')">Rotate 90° CW</button>
+                    <button class="tablet-menu-item" @click="tabletMenuAction('rotate-90')">Rotate 90° CCW</button>
+                    <div class="tablet-menu-divider"></div>
+                    <div class="tablet-menu-subheader">Layers</div>
+                    <button class="tablet-menu-item" @click="tabletMenuAction('flatten')">Flatten Image</button>
+                </div>
+
+                <!-- Zoom Menu Popup -->
                 <div v-if="tabletZoomMenuOpen" class="tablet-zoom-popup" @click.stop>
                     <button class="tablet-menu-item" @click="setZoomPercent(25); tabletZoomMenuOpen = false">25%</button>
                     <button class="tablet-menu-item" @click="setZoomPercent(50); tabletZoomMenuOpen = false">50%</button>
@@ -426,7 +565,8 @@ export default {
                 </div> -->
 
                 <!-- Canvas container -->
-                <div class="canvas-container" ref="canvasContainer">
+                <div class="canvas-container" ref="canvasContainer"
+                    :class="canvasContainerClasses">
                     <canvas
                         id="main-canvas"
                         ref="mainCanvas"
@@ -441,8 +581,9 @@ export default {
                         @contextmenu.prevent
                     ></canvas>
                     <!-- Cursor overlay for large brush sizes (no browser limit) -->
+                    <!-- Hidden when non-pinned drawer is open (drawer would capture cursor) -->
                     <canvas
-                        v-show="showCursorOverlay"
+                        v-show="showCursorOverlay && !drawerOverlapsCanvas"
                         ref="cursorOverlay"
                         class="cursor-overlay"
                         :style="{
@@ -596,6 +737,11 @@ export default {
                     <span class="tablet-tool-name">{{ currentToolName }}</span>
                 </div>
                 <div class="tablet-bottom-divider"></div>
+                <!-- Coordinates (always visible, shows values when pointer active) -->
+                <div class="tablet-coords">
+                    <span class="tablet-coords-value" :class="{ active: isPointerActive }">{{ isPointerActive ? coordsX + ', ' + coordsY : '\u00A0' }}</span>
+                </div>
+                <div class="tablet-bottom-divider"></div>
                 <div class="tablet-prop" v-if="tabletShowSize">
                     <label>Size</label>
                     <input type="range" min="1" max="200" :value="tabletBrushSize" @input="updateTabletBrushSize($event.target.value)">
@@ -626,8 +772,8 @@ export default {
                 </div>
             </div>
 
-            <!-- Status bar (hidden in limited mode) -->
-            <div class="status-bar" v-show="currentUIMode !== 'limited'">
+            <!-- Status bar (desktop mode only) -->
+            <div class="status-bar" v-show="currentUIMode === 'desktop'">
                 <span class="status-coords">{{ coordsX }}, {{ coordsY }}</span>
                 <span class="status-separator">|</span>
                 <span class="status-size">{{ docWidth }} x {{ docHeight }}</span>
@@ -890,6 +1036,46 @@ export default {
             // Layers in reverse order (top to bottom) for layer panel display
             return this.layers.slice().reverse();
         },
+        hasSelection() {
+            // Check if there's an active selection
+            const selection = this.getSelection();
+            return selection && selection.width > 0 && selection.height > 0;
+        },
+        canvasContainerClasses() {
+            // Classes for canvas container (no longer used for pinned drawers)
+            return {};
+        },
+        drawerOverlapsCanvas() {
+            // True when a floating panel overlaps the canvas area
+            // Dock panels on edges (left tools, right nav/layers/history) don't overlap
+            if (this.currentUIMode !== 'tablet') return false;
+            // Only the filter panel floats over the canvas
+            return this.tabletFilterPanelOpen;
+        },
+        filterCategories() {
+            // Get unique filter categories in order
+            const categoryOrder = ['blur', 'color', 'edge', 'sharpen', 'noise', 'artistic', 'threshold', 'morphology', 'uncategorized'];
+            const available = new Set(this.filters.map(f => f.category || 'uncategorized'));
+            return categoryOrder.filter(cat => available.has(cat));
+        },
+        filtersInCurrentTab() {
+            // Get filters for the currently selected tab
+            return this.filters.filter(f => (f.category || 'uncategorized') === this.tabletFilterTab);
+        },
+        hasOpenUnpinnedPopup() {
+            // Check if any popup or panel is open that needs overlay
+            if (this.currentUIMode !== 'tablet') return false;
+            return this.tabletFilterPanelOpen ||
+                   this.tabletFileMenuOpen ||
+                   this.tabletEditMenuOpen ||
+                   this.tabletViewMenuOpen ||
+                   this.tabletImageMenuOpen ||
+                   this.tabletZoomMenuOpen;
+        },
+        // Track which side panel has focus (for closing unpinned on blur)
+        activeSidePanel() {
+            return this._activeSidePanel || null;
+        },
     },
 
     data() {
@@ -911,17 +1097,37 @@ export default {
             currentUIMode: initialMode,
 
             // Tablet mode state
-            tabletLeftDrawerOpen: false,     // Tools drawer open
-            tabletRightDrawerOpen: false,    // Panels drawer open
-            tabletRightTab: 'layers',        // Active tab in right drawer: 'navigator', 'layers', 'history'
-            tabletMenuOpen: false,           // Menu popup open
+            tabletLeftDrawerOpen: false,     // Tools panel open
+
+            // Independent floating panels (Navigator, Layers, History)
+            tabletNavPanelOpen: false,
+            tabletLayersPanelOpen: false,
+            tabletHistoryPanelOpen: false,
+            _activeSidePanel: null,          // Currently focused side panel (for blur handling)
+
+            // Individual menu popups
+            tabletFileMenuOpen: false,
+            tabletEditMenuOpen: false,
+            tabletViewMenuOpen: false,
+            tabletFilterPanelOpen: false,    // Filters panel (special tabbed panel)
+            tabletFilterTab: 'blur',         // Active filter category tab
+            tabletImageMenuOpen: false,
             tabletZoomMenuOpen: false,       // Zoom menu popup open
+
+            // Filter preview system
+            filterPreviews: {},              // Cache: { filterId: base64ImageData }
+            filterPreviewsLoading: {},       // { filterId: boolean }
+            filterSampleImageLoaded: false,  // Has the sample image been loaded
             tabletBrushSize: 20,             // Current brush/eraser size for tablet UI
             tabletOpacity: 100,              // Current opacity for tablet UI
             tabletHardness: 100,             // Current hardness for tablet UI
             tabletShowSize: true,            // Whether to show size slider
             tabletShowOpacity: true,         // Whether to show opacity slider
             tabletShowHardness: false,       // Whether to show hardness slider
+
+            // Tool drag-to-reorder state
+            toolDragIndex: null,             // Index of tool being dragged
+            toolDragOverIndex: null,         // Index of tool being dragged over
             tabletAllTools: [                // All tools available in tablet mode
                 { id: 'selection', name: 'Select', icon: 'selection' },
                 { id: 'lasso', name: 'Lasso', icon: 'lasso' },
@@ -1082,6 +1288,7 @@ export default {
             // Status
             coordsX: 0,
             coordsY: 0,
+            isPointerActive: false,  // True when pointer (mouse/touch) is over canvas
             statusMessage: 'Ready',
             backendConnected: false,
             memoryUsedMB: 0,
@@ -1121,20 +1328,23 @@ export default {
 
     watch: {
         zoom() {
-            // Update brush cursor when zoom changes
-            if (['brush', 'eraser', 'spray'].includes(this.currentToolId)) {
-                this.updateBrushCursor();
-            }
+            // Update cursor overlay when zoom changes (for size-based tools)
+            this.updateBrushCursor();
         }
     },
 
     mounted() {
         this.docWidth = this.canvasWidth;
         this.docHeight = this.canvasHeight;
+
+        // Load saved tool order for tablet mode
+        this.loadToolOrder();
+
         this.initEditor();
 
         // Close menu on outside click
         document.addEventListener('click', this.closeMenu);
+        document.addEventListener('click', this.handleGlobalClick);
         window.addEventListener('keydown', this.handleKeyDown);
         window.addEventListener('keyup', this.handleKeyUp);
         window.addEventListener('resize', this.handleResize);
@@ -1142,6 +1352,7 @@ export default {
 
     beforeUnmount() {
         document.removeEventListener('click', this.closeMenu);
+        document.removeEventListener('click', this.handleGlobalClick);
         window.removeEventListener('keydown', this.handleKeyDown);
         window.removeEventListener('keyup', this.handleKeyUp);
         window.removeEventListener('resize', this.handleResize);
@@ -1244,8 +1455,13 @@ export default {
             // Set up canvas
             const canvas = this.$refs.mainCanvas;
             const container = this.$refs.canvasContainer;
-            canvas.width = container.clientWidth;
-            canvas.height = container.clientHeight;
+            if (!canvas || !container) {
+                console.error('Canvas refs not available, retrying...');
+                await new Promise(r => setTimeout(r, 100));
+                return this.initEditor();  // Retry
+            }
+            canvas.width = container.clientWidth || 800;
+            canvas.height = container.clientHeight || 600;
 
             // Create app-like context object
             const eventBus = new EventBus();
@@ -1272,6 +1488,7 @@ export default {
             app.layerStack = new LayerStack(this.docWidth, this.docHeight, eventBus);
             app.renderer = new Renderer(canvas, app.layerStack);
             app.renderer.setApp(app);  // Enable tool overlay rendering
+            app.renderer.setOnRender(() => this.throttledNavigatorUpdate());  // Update navigator on render
             app.history = new History(app);
             app.clipboard = new Clipboard(app);
             app.toolManager = new ToolManager(app);
@@ -1943,47 +2160,267 @@ export default {
 
         // Tablet mode methods
 
-        showTabletMenu() {
-            this.tabletMenuOpen = !this.tabletMenuOpen;
-            this.tabletZoomMenuOpen = false;
-            if (this.tabletMenuOpen) {
-                // Close menu when clicking outside
-                setTimeout(() => {
-                    const closeHandler = (e) => {
-                        if (!e.target.closest('.tablet-menu-popup')) {
-                            this.tabletMenuOpen = false;
-                            document.removeEventListener('click', closeHandler);
-                        }
-                    };
-                    document.addEventListener('click', closeHandler);
-                }, 10);
+        closeAllPanels() {
+            // Close all side panels and drawers
+            this.tabletLeftDrawerOpen = false;
+            this.tabletNavPanelOpen = false;
+            this.tabletLayersPanelOpen = false;
+            this.tabletHistoryPanelOpen = false;
+            this.tabletFilterPanelOpen = false;
+        },
+
+        toggleTabletPopup(which) {
+            // Close all other popups first
+            const popups = ['file', 'edit', 'view', 'image', 'zoom'];
+            for (const p of popups) {
+                if (p !== which) {
+                    this[`tablet${p.charAt(0).toUpperCase() + p.slice(1)}MenuOpen`] = false;
+                }
+            }
+
+            // Toggle the requested popup
+            switch (which) {
+                case 'file':
+                    this.tabletFileMenuOpen = !this.tabletFileMenuOpen;
+                    break;
+                case 'edit':
+                    this.tabletEditMenuOpen = !this.tabletEditMenuOpen;
+                    break;
+                case 'view':
+                    this.tabletViewMenuOpen = !this.tabletViewMenuOpen;
+                    break;
+                case 'filter':
+                    this.tabletFilterPanelOpen = !this.tabletFilterPanelOpen;
+                    // Load filter previews when opening the panel
+                    if (this.tabletFilterPanelOpen) {
+                        this.loadAllFilterPreviews();
+                    }
+                    break;
+                case 'image':
+                    this.tabletImageMenuOpen = !this.tabletImageMenuOpen;
+                    break;
+                case 'zoom':
+                    this.tabletZoomMenuOpen = !this.tabletZoomMenuOpen;
+                    break;
             }
         },
+
+        closeAllTabletPopups() {
+            // Close all non-pinned popups and panels
+            this.tabletFileMenuOpen = false;
+            this.tabletEditMenuOpen = false;
+            this.tabletViewMenuOpen = false;
+            this.tabletImageMenuOpen = false;
+            this.tabletZoomMenuOpen = false;
+
+            // Close non-pinned panels/drawers
+            this.closeAllPanels();
+        },
+
+        // ==================== SIDE PANEL METHODS (Nav, Layers, History) ====================
+
+        toggleSidePanel(which) {
+            // Toggle the requested panel (multiple can be open, they stack)
+            const openKey = `tablet${which.charAt(0).toUpperCase() + which.slice(1)}PanelOpen`;
+            this[openKey] = !this[openKey];
+
+            // Track active panel for focus handling
+            if (this[openKey]) {
+                this._activeSidePanel = which;
+            } else {
+                this._activeSidePanel = null;
+            }
+        },
+
+        focusSidePanel(which) {
+            // Called when user clicks within a panel
+            this._activeSidePanel = which;
+        },
+
+        closeSidePanel(which) {
+            const openKey = `tablet${which.charAt(0).toUpperCase() + which.slice(1)}PanelOpen`;
+            this[openKey] = false;
+            if (this._activeSidePanel === which) {
+                this._activeSidePanel = null;
+            }
+        },
+
+        handleGlobalClick(event) {
+            // Close side panels when clicking outside - but NOT when clicking canvas (painting)
+            if (this.currentUIMode !== 'tablet') return;
+
+            // Check if click was inside any dock stack (using composedPath for detached elements)
+            const path = event.composedPath();
+            const clickedDock = path.some(el => el.classList && (
+                el.classList.contains('tablet-dock-stack') ||
+                el.classList.contains('tablet-dock-icon') ||
+                el.classList.contains('tablet-dock-panel')
+            ));
+            if (clickedDock) return; // Don't close if clicking in dock area
+
+            // Don't close panels when clicking on canvas (user is painting/drawing)
+            const clickedCanvas = path.some(el =>
+                el.classList && el.classList.contains('canvas-container') ||
+                el.tagName === 'CANVAS'
+            );
+            if (clickedCanvas) return;
+
+            // Don't close panels when clicking on floating panels or menus
+            const clickedFloating = path.some(el => el.classList && (
+                el.classList.contains('tablet-floating-panel') ||
+                el.classList.contains('tablet-menu-popup') ||
+                el.classList.contains('tablet-top-bar') ||
+                el.classList.contains('tablet-bottom-bar')
+            ));
+            if (clickedFloating) return;
+
+            // Close all dock panels (clicked on overlay or empty space)
+            this.tabletLeftDrawerOpen = false;
+            this.tabletNavPanelOpen = false;
+            this.tabletLayersPanelOpen = false;
+            this.tabletHistoryPanelOpen = false;
+        },
+
+        async loadFilterPreview(filterId) {
+            // Load a single filter preview from the backend
+            if (this.filterPreviews[filterId] || this.filterPreviewsLoading[filterId]) {
+                return;
+            }
+
+            this.filterPreviewsLoading[filterId] = true;
+
+            try {
+                const response = await fetch(`/api/filters/${filterId}/preview`);
+                if (response.ok) {
+                    const data = await response.json();
+                    this.filterPreviews[filterId] = data.preview;
+                }
+            } catch (err) {
+                console.warn(`Failed to load filter preview for ${filterId}:`, err);
+            } finally {
+                this.filterPreviewsLoading[filterId] = false;
+            }
+        },
+
+        async loadAllFilterPreviews() {
+            // Load previews for all filters in the current tab
+            for (const filter of this.filtersInCurrentTab) {
+                if (!this.filterPreviews[filter.id]) {
+                    this.loadFilterPreview(filter.id);
+                }
+            }
+        },
+
+        switchFilterTab(category) {
+            this.tabletFilterTab = category;
+            // Wait for Vue to update filtersInCurrentTab, then load previews
+            this.$nextTick(() => {
+                this.loadAllFilterPreviews();
+            });
+        },
+
+        // Tool drag-to-reorder methods
+        onToolDragStart(index, event) {
+            this.toolDragIndex = index;
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', index.toString());
+            // Add visual feedback
+            event.target.classList.add('dragging');
+        },
+
+        onToolDragOver(index, event) {
+            if (this.toolDragIndex === null || this.toolDragIndex === index) return;
+            this.toolDragOverIndex = index;
+            event.dataTransfer.dropEffect = 'move';
+        },
+
+        onToolDragLeave() {
+            this.toolDragOverIndex = null;
+        },
+
+        onToolDrop(targetIndex) {
+            if (this.toolDragIndex === null || this.toolDragIndex === targetIndex) return;
+
+            // Reorder the tools array
+            const tool = this.tabletAllTools.splice(this.toolDragIndex, 1)[0];
+            this.tabletAllTools.splice(targetIndex, 0, tool);
+
+            // Save custom order to localStorage
+            this.saveToolOrder();
+
+            // Reset drag state
+            this.toolDragIndex = null;
+            this.toolDragOverIndex = null;
+        },
+
+        onToolDragEnd(event) {
+            event.target.classList.remove('dragging');
+            this.toolDragIndex = null;
+            this.toolDragOverIndex = null;
+        },
+
+        saveToolOrder() {
+            try {
+                const order = this.tabletAllTools.map(t => t.id);
+                localStorage.setItem('slopstag-tool-order', JSON.stringify(order));
+            } catch (e) {
+                console.warn('Could not save tool order:', e);
+            }
+        },
+
+        loadToolOrder() {
+            try {
+                const saved = localStorage.getItem('slopstag-tool-order');
+                if (saved) {
+                    const order = JSON.parse(saved);
+                    // Reorder tools based on saved order
+                    const orderedTools = [];
+                    const remainingTools = [...this.tabletAllTools];
+
+                    for (const id of order) {
+                        const idx = remainingTools.findIndex(t => t.id === id);
+                        if (idx !== -1) {
+                            orderedTools.push(remainingTools.splice(idx, 1)[0]);
+                        }
+                    }
+                    // Add any new tools that weren't in saved order
+                    this.tabletAllTools = [...orderedTools, ...remainingTools];
+                }
+            } catch (e) {
+                console.warn('Could not load tool order:', e);
+            }
+        },
+
+        // Note: showTabletMenu() removed - replaced by toggleTabletPopup() with individual menu buttons
 
         showTabletZoomMenu() {
-            this.tabletZoomMenuOpen = !this.tabletZoomMenuOpen;
-            this.tabletMenuOpen = false;
-            if (this.tabletZoomMenuOpen) {
-                setTimeout(() => {
-                    const closeHandler = (e) => {
-                        if (!e.target.closest('.tablet-zoom-popup')) {
-                            this.tabletZoomMenuOpen = false;
-                            document.removeEventListener('click', closeHandler);
-                        }
-                    };
-                    document.addEventListener('click', closeHandler);
-                }, 10);
-            }
+            // Legacy method for zoom popup - now handled via toggleTabletPopup('zoom')
+            this.toggleTabletPopup('zoom');
         },
 
-        tabletMenuAction(action) {
-            this.tabletMenuOpen = false;
+        tabletMenuAction(action, param) {
+            // Close all menu popups
+            this.tabletFileMenuOpen = false;
+            this.tabletEditMenuOpen = false;
+            this.tabletViewMenuOpen = false;
+            this.tabletImageMenuOpen = false;
             switch (action) {
+                // File actions
                 case 'new':
                     this.showNewDocumentDialog();
                     break;
+                case 'loadSample':
+                    if (param) this.loadSampleImage(param);
+                    break;
                 case 'export':
                     this.menuAction('export');
+                    break;
+                // Edit actions
+                case 'undo':
+                    this.undo();
+                    break;
+                case 'redo':
+                    this.redo();
                     break;
                 case 'cut':
                     this.cutSelection();
@@ -1994,12 +2431,16 @@ export default {
                 case 'paste':
                     this.pasteSelection();
                     break;
+                case 'pasteInPlace':
+                    this.pasteInPlace();
+                    break;
                 case 'selectAll':
                     this.selectAll();
                     break;
                 case 'deselect':
                     this.deselect();
                     break;
+                // Image actions
                 case 'flipH':
                     this.flipHorizontal();
                     break;
@@ -2012,8 +2453,15 @@ export default {
                 case 'rotate-90':
                     this.rotate(-90);
                     break;
+                case 'flatten':
+                    this.menuAction('flatten');
+                    break;
+                // View actions
                 case 'desktop':
                     this.setUIMode('desktop');
+                    break;
+                case 'limited':
+                    this.setUIMode('limited');
                     break;
                 case 'toggleTheme':
                     this.toggleTheme();
@@ -2177,8 +2625,8 @@ export default {
                 }
             }
 
-            // Update tablet navigator if right drawer is open on navigator tab
-            if (this.tabletRightDrawerOpen && this.tabletRightTab === 'navigator') {
+            // Update tablet navigator if nav panel is open
+            if (this.tabletNavPanelOpen) {
                 this.$nextTick(() => this.updateTabletNavigator());
             }
         },
@@ -2211,10 +2659,14 @@ export default {
 
         updateNavigator() {
             const app = this.getState();
-            if (!app?.renderer || !app?.layerStack || !this.$refs.navigatorCanvas) return;
-            if (!this.showNavigator) return;
-
-            const canvas = this.$refs.navigatorCanvas;
+            const canvas = this.$refs.tabletNavigatorCanvas || this.$refs.navigatorCanvas;
+            if (!app?.renderer || !app?.layerStack || !canvas) return;
+            // In tablet mode, update if nav panel is open; in desktop mode check showNavigator
+            if (this.currentUIMode === 'tablet') {
+                if (!this.tabletNavPanelOpen) return;
+            } else {
+                if (!this.showNavigator) return;
+            }
             const ctx = canvas.getContext('2d');
             const maxSize = 180;
 
@@ -2427,9 +2879,10 @@ export default {
             // First ensure canvas size matches container
             const canvas = this.$refs.mainCanvas;
             const container = this.$refs.canvasContainer;
+            if (!canvas || !container) return;
 
-            canvas.width = container.clientWidth;
-            canvas.height = container.clientHeight;
+            canvas.width = container.clientWidth || canvas.width;
+            canvas.height = container.clientHeight || canvas.height;
 
             // Calculate zoom to fit document in available space with small padding
             const docWidth = app.renderer.compositeCanvas?.width || this.docWidth;
@@ -2821,7 +3274,28 @@ export default {
             const layer = app?.layerStack?.getActiveLayer();
             if (!layer) return;
 
-            const imageData = layer.ctx.getImageData(0, 0, layer.width, layer.height);
+            // Check for active selection to constrain filter
+            const selection = this.getSelection();
+            let filterX = 0, filterY = 0, filterWidth = layer.width, filterHeight = layer.height;
+
+            if (selection && selection.width > 0 && selection.height > 0) {
+                // Convert selection to layer coordinates if needed
+                let selX = selection.x, selY = selection.y;
+                if (layer.docToCanvas) {
+                    const coords = layer.docToCanvas(selection.x, selection.y);
+                    selX = coords.x;
+                    selY = coords.y;
+                }
+                // Clamp to layer bounds
+                filterX = Math.max(0, Math.floor(selX));
+                filterY = Math.max(0, Math.floor(selY));
+                filterWidth = Math.min(layer.width - filterX, Math.ceil(selection.width));
+                filterHeight = Math.min(layer.height - filterY, Math.ceil(selection.height));
+
+                if (filterWidth <= 0 || filterHeight <= 0) return;
+            }
+
+            const imageData = layer.ctx.getImageData(filterX, filterY, filterWidth, filterHeight);
 
             // Create binary payload
             const metadata = JSON.stringify({
@@ -2855,7 +3329,8 @@ export default {
                 imageData.height
             );
 
-            layer.ctx.putImageData(resultImageData, 0, 0);
+            // Put result back at the correct position (selection offset)
+            layer.ctx.putImageData(resultImageData, filterX, filterY);
 
             if (renderAfter) {
                 app.renderer.requestRender();
@@ -2908,6 +3383,14 @@ export default {
                 'zoom-out': '&#128270;',   // Magnifier minus
                 'save': '&#128190;',       // Floppy disk
                 'export': '&#128228;',     // Export arrow
+
+                // Menu icons for tablet mode
+                'file': '&#128196;',       // Document
+                'edit': '&#9998;',         // Edit pencil
+                'view': '&#128065;',       // Eye (view)
+                'filter': '&#128167;',     // Water drop (effects/filter)
+                'image': '&#128444;',      // Framed image
+                'deselect': '&#10060;',    // X in box (deselect)
             };
             return icons[icon] || '&#9679;';
         },
@@ -2940,8 +3423,8 @@ export default {
                 }
             }
 
-            // Update cursor when size changes for brush/eraser/spray tools
-            if (propId === 'size' && ['brush', 'eraser', 'spray'].includes(this.currentToolId)) {
+            // Update cursor when size changes for any size-based tool
+            if (propId === 'size') {
                 this.updateBrushCursor();
             }
         },
@@ -3079,10 +3562,12 @@ export default {
                 return;
             }
 
-            const toolId = tool.constructor.id;
+            // Tools that should show a size-based circular cursor overlay
+            // These are tools with cursor='none' that have a size property
+            const toolCursor = tool.constructor.cursor;
+            const hasSize = typeof tool.size === 'number';
 
-            // Tools that should show a size-based circular cursor
-            if (toolId === 'brush' || toolId === 'eraser' || toolId === 'spray') {
+            if (toolCursor === 'none' && hasSize) {
                 const size = tool.size || 20;
                 const zoom = app?.renderer?.zoom || 1;
                 const scaledSize = Math.max(4, size * zoom);
@@ -3097,7 +3582,7 @@ export default {
             } else {
                 // Use the tool's default cursor
                 this.showCursorOverlay = false;
-                this.canvasCursor = tool.constructor.cursor || 'crosshair';
+                this.canvasCursor = toolCursor || 'crosshair';
             }
         },
 
@@ -3149,11 +3634,11 @@ export default {
         },
 
         updateCursorOverlayPosition(clientX, clientY) {
-            // Update overlay position relative to canvas container
-            const container = this.$refs.canvasContainer;
-            if (!container) return;
+            // Update overlay position relative to main canvas (same reference as painting code)
+            const canvas = this.$refs.mainCanvas;
+            if (!canvas) return;
 
-            const rect = container.getBoundingClientRect();
+            const rect = canvas.getBoundingClientRect();
             this.cursorOverlayX = clientX - rect.left;
             this.cursorOverlayY = clientY - rect.top;
         },
@@ -3249,10 +3734,15 @@ export default {
             }
         },
 
-        updateLayerOpacity() {
+        updateLayerOpacity(opacity = null) {
             const app = this.getState();
             const layer = app?.layerStack?.getActiveLayer();
             if (layer) {
+                // If opacity is passed (from tablet mode), update the reactive value first
+                // opacity comes in as 0-100 from the range slider
+                if (opacity !== null) {
+                    this.activeLayerOpacity = Math.round(opacity);
+                }
                 layer.opacity = this.activeLayerOpacity / 100;
                 app.renderer.requestRender();
             }
@@ -3547,12 +4037,14 @@ export default {
             this.isPanning = false;
             this.mouseOverCanvas = false;
             this.showCursorOverlay = false;
+            this.isPointerActive = false;
             const app = this.getState();
             app?.toolManager?.currentTool?.onMouseLeave(e);
         },
 
         handleMouseEnter(e) {
             this.mouseOverCanvas = true;
+            this.isPointerActive = true;
             // Update cursor overlay position first, then show it
             this.updateCursorOverlayPosition(e.clientX, e.clientY);
             this.updateBrushCursor();
@@ -3682,8 +4174,10 @@ export default {
 
             const canvas = this.$refs.mainCanvas;
             const container = this.$refs.canvasContainer;
-            canvas.width = container.clientWidth;
-            canvas.height = container.clientHeight;
+            if (!canvas || !container) return;
+
+            canvas.width = container.clientWidth || canvas.width;
+            canvas.height = container.clientHeight || canvas.height;
             app.renderer.centerCanvas();
         },
 

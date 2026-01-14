@@ -41,20 +41,18 @@ export class EraserTool extends Tool {
 
     activate() {
         super.activate();
-        this.brushCursor.setVisible(true);
+        // Note: BrushCursor is not used - Vue component handles cursor overlay for eraser tool
         this.app.renderer.requestRender();
     }
 
     deactivate() {
         super.deactivate();
-        this.brushCursor.setVisible(false);
         this.app.renderer.requestRender();
     }
 
-    drawOverlay(ctx, docToScreen) {
-        const zoom = this.app.renderer?.zoom || 1;
-        this.brushCursor.draw(ctx, docToScreen, zoom);
-    }
+    // Note: drawOverlay is intentionally not implemented for EraserTool
+    // The Vue component (canvas_editor.js) handles the cursor overlay for brush/eraser/spray
+    // to avoid double cursors and ensure consistent behavior across all UI modes
 
     updateEraserStamp() {
         const size = Math.max(1, Math.ceil(this.size));

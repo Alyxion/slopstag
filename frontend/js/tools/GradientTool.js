@@ -101,7 +101,23 @@ export class GradientTool extends Tool {
 
         ctx.globalAlpha = this.opacity / 100;
         ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+        // Check for active selection and constrain gradient to selection bounds
+        const selectionTool = this.app.toolManager?.tools.get('selection');
+        const selection = selectionTool?.getSelection();
+
+        if (selection && selection.width > 0 && selection.height > 0) {
+            // Draw gradient only within selection
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(selection.x, selection.y, selection.width, selection.height);
+            ctx.clip();
+            ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+            ctx.restore();
+        } else {
+            ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        }
+
         ctx.globalAlpha = 1.0;
     }
 

@@ -21,6 +21,9 @@ export class SelectionTool extends Tool {
         // Current selection (null if none)
         this.selection = null;
 
+        // Double-escape tracking (require Esc-Esc to clear selection)
+        this.lastEscapeTime = 0;
+
         // Marching ants animation
         this.antOffset = 0;
         this.antAnimationId = null;
@@ -98,9 +101,15 @@ export class SelectionTool extends Tool {
     }
 
     onKeyDown(e) {
-        // Escape to clear selection
+        // Double-Escape to clear selection (require two Esc presses within 500ms)
         if (e.key === 'Escape') {
-            this.clearSelection();
+            const now = Date.now();
+            if (now - this.lastEscapeTime < 500) {
+                this.clearSelection();
+                this.lastEscapeTime = 0;  // Reset so next single Esc doesn't trigger
+            } else {
+                this.lastEscapeTime = now;
+            }
         }
         // Ctrl+A to select all
         if ((e.ctrlKey || e.metaKey) && e.key === 'a') {

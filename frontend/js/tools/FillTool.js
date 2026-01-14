@@ -77,6 +77,33 @@ export class FillTool extends Tool {
         const width = imageData.width;
         const height = imageData.height;
 
+        // Check for active selection to constrain fill
+        const selectionTool = this.app.toolManager?.tools.get('selection');
+        const selection = selectionTool?.getSelection();
+        let selBounds = null;
+
+        if (selection && selection.width > 0 && selection.height > 0) {
+            // Convert selection to layer coordinates if needed
+            let selX = selection.x, selY = selection.y;
+            if (layer.docToCanvas) {
+                const coords = layer.docToCanvas(selection.x, selection.y);
+                selX = coords.x;
+                selY = coords.y;
+            }
+            selBounds = {
+                left: Math.max(0, Math.floor(selX)),
+                top: Math.max(0, Math.floor(selY)),
+                right: Math.min(width, Math.ceil(selX + selection.width)),
+                bottom: Math.min(height, Math.ceil(selY + selection.height))
+            };
+
+            // Check if click is within selection
+            if (startX < selBounds.left || startX >= selBounds.right ||
+                startY < selBounds.top || startY >= selBounds.bottom) {
+                return; // Click outside selection, do nothing
+            }
+        }
+
         // Get target color at click position
         const targetIdx = (startY * width + startX) * 4;
         const targetColor = {
@@ -96,8 +123,13 @@ export class FillTool extends Tool {
         while (stack.length > 0) {
             const [x, y] = stack.pop();
 
-            // Check bounds
-            if (x < 0 || x >= width || y < 0 || y >= height) continue;
+            // Check bounds (use selection bounds if available)
+            if (selBounds) {
+                if (x < selBounds.left || x >= selBounds.right ||
+                    y < selBounds.top || y >= selBounds.bottom) continue;
+            } else {
+                if (x < 0 || x >= width || y < 0 || y >= height) continue;
+            }
 
             // Check if visited
             const key = y * width + x;

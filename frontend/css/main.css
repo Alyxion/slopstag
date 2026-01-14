@@ -8,6 +8,9 @@
 @import url('./modes/tablet.css');
 @import url('./modes/limited.css');
 
+/* Import component files */
+@import url('./components/floating-panel.css');
+
 /* Pre-Vue mode hiding - prevents flash of wrong UI before Vue mounts */
 /* These rules use data-initial-mode on html element set by inline script */
 :root[data-initial-mode="limited"] .toolbar-container,
