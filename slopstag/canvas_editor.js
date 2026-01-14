@@ -634,6 +634,7 @@ export default {
                         @mouseup="handleMouseUp"
                         @mouseleave="handleMouseLeave"
                         @mouseenter="handleMouseEnter"
+                        @dblclick="handleDoubleClick"
                         @wheel.prevent="handleWheel"
                         @contextmenu.prevent
                     ></canvas>
@@ -722,7 +723,8 @@ export default {
                                 <div class="layer-info">
                                     <span class="layer-name">{{ layer.name }}</span>
                                     <span class="layer-meta">
-                                        <span class="layer-type-icon" v-if="layer.isVector" title="Vector Layer">&#9674;</span>
+                                        <span class="layer-type-icon text" v-if="layer.isText" title="Text Layer">T</span>
+                                        <span class="layer-type-icon" v-else-if="layer.isVector" title="Vector Layer">&#9674;</span>
                                         <span class="layer-type-icon raster" v-else title="Pixel Layer">&#9632;</span>
                                         <span v-if="layer.locked" class="layer-locked" v-html="'&#128274;'"></span>
                                     </span>
@@ -814,6 +816,26 @@ export default {
                     <input type="range" min="0" max="100" :value="tabletHardness" @input="updateTabletHardness($event.target.value)">
                     <span class="tablet-prop-value">{{ tabletHardness }}%</span>
                 </div>
+                <!-- Text tool properties -->
+                <template v-if="tabletShowTextProps">
+                    <div class="tablet-prop">
+                        <label>Size</label>
+                        <input type="range" min="8" max="120" :value="tabletFontSize" @input="updateTabletFontSize($event.target.value)">
+                        <span class="tablet-prop-value">{{ tabletFontSize }}px</span>
+                    </div>
+                    <div class="tablet-prop">
+                        <label>Font</label>
+                        <select :value="tabletFontFamily" @change="updateTabletFontFamily($event.target.value)" class="tablet-select">
+                            <option v-for="font in tabletFontOptions" :key="font" :value="font">{{ font }}</option>
+                        </select>
+                    </div>
+                    <div class="tablet-prop">
+                        <button class="tablet-toggle-btn" :class="{ active: tabletFontWeight === 'bold' }"
+                            @click="toggleTabletFontWeight" title="Bold">B</button>
+                        <button class="tablet-toggle-btn italic" :class="{ active: tabletFontStyle === 'italic' }"
+                            @click="toggleTabletFontStyle" title="Italic">I</button>
+                    </div>
+                </template>
                 <div style="flex: 1;"></div>
                 <div class="tablet-color-controls">
                     <div class="tablet-color-swatches">
@@ -1184,6 +1206,14 @@ export default {
             tabletShowOpacity: true,         // Whether to show opacity slider
             tabletShowHardness: false,       // Whether to show hardness slider
 
+            // Text tool properties for tablet
+            tabletShowTextProps: false,      // Whether to show text tool properties
+            tabletFontSize: 24,              // Current font size
+            tabletFontFamily: 'Arial',       // Current font family
+            tabletFontWeight: 'normal',      // Current font weight
+            tabletFontStyle: 'normal',       // Current font style
+            tabletFontOptions: ['Arial', 'Helvetica', 'Times New Roman', 'Georgia', 'Courier New', 'Verdana', 'Impact'],
+
             // Tool drag-to-reorder state
             toolDragIndex: null,             // Index of tool being dragged
             toolDragOverIndex: null,         // Index of tool being dragged over
@@ -1519,8 +1549,9 @@ export default {
                 await new Promise(r => setTimeout(r, 100));
                 return this.initEditor();  // Retry
             }
-            canvas.width = container.clientWidth || 800;
-            canvas.height = container.clientHeight || 600;
+            // Store logical display dimensions
+            const displayWidth = container.clientWidth || 800;
+            const displayHeight = container.clientHeight || 600;
 
             // Create app-like context object
             const eventBus = new EventBus();
@@ -1546,6 +1577,7 @@ export default {
             // Create initial empty layer stack (will be replaced when document is created)
             app.layerStack = new LayerStack(this.docWidth, this.docHeight, eventBus);
             app.renderer = new Renderer(canvas, app.layerStack);
+            app.renderer.resizeDisplay(displayWidth, displayHeight);  // Set up HiDPI canvas
             app.renderer.setApp(app);  // Enable tool overlay rendering
             app.renderer.setOnRender(() => this.throttledNavigatorUpdate());  // Update navigator on render
             app.history = new History(app);
@@ -2566,9 +2598,9 @@ export default {
         zoomIn() {
             const app = this.getState();
             if (!app?.renderer) return;
-            const canvas = this.$refs.mainCanvas;
-            const centerX = canvas.width / 2;
-            const centerY = canvas.height / 2;
+            // Use logical display dimensions for center point
+            const centerX = app.renderer.displayWidth / 2;
+            const centerY = app.renderer.displayHeight / 2;
             app.renderer.zoomAt(1.25, centerX, centerY);
             this.zoom = app.renderer.zoom;
             this.updateNavigator();
@@ -2577,9 +2609,9 @@ export default {
         zoomOut() {
             const app = this.getState();
             if (!app?.renderer) return;
-            const canvas = this.$refs.mainCanvas;
-            const centerX = canvas.width / 2;
-            const centerY = canvas.height / 2;
+            // Use logical display dimensions for center point
+            const centerX = app.renderer.displayWidth / 2;
+            const centerY = app.renderer.displayHeight / 2;
             app.renderer.zoomAt(0.8, centerX, centerY);
             this.zoom = app.renderer.zoom;
             this.updateNavigator();
@@ -2606,23 +2638,20 @@ export default {
             // Draw document preview
             ctx.drawImage(app.renderer.compositeCanvas, 0, 0, canvas.width, canvas.height);
 
-            // Draw viewport rectangle
-            const displayCanvas = this.$refs.mainCanvas;
-            if (displayCanvas) {
-                const viewLeft = -app.renderer.panX / app.renderer.zoom;
-                const viewTop = -app.renderer.panY / app.renderer.zoom;
-                const viewWidth = displayCanvas.width / app.renderer.zoom;
-                const viewHeight = displayCanvas.height / app.renderer.zoom;
+            // Draw viewport rectangle using logical display dimensions
+            const viewLeft = -app.renderer.panX / app.renderer.zoom;
+            const viewTop = -app.renderer.panY / app.renderer.zoom;
+            const viewWidth = app.renderer.displayWidth / app.renderer.zoom;
+            const viewHeight = app.renderer.displayHeight / app.renderer.zoom;
 
-                ctx.strokeStyle = '#ff3333';
-                ctx.lineWidth = 2;
-                ctx.strokeRect(
-                    viewLeft * scale,
-                    viewTop * scale,
-                    viewWidth * scale,
-                    viewHeight * scale
-                );
-            }
+            ctx.strokeStyle = '#ff3333';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(
+                viewLeft * scale,
+                viewTop * scale,
+                viewWidth * scale,
+                viewHeight * scale
+            );
         },
 
         updateTabletHardness(value) {
@@ -2680,6 +2709,26 @@ export default {
             this.updateToolProperty('opacity', this.tabletOpacity / 100);
         },
 
+        updateTabletFontSize(value) {
+            this.tabletFontSize = parseInt(value);
+            this.updateToolProperty('fontSize', this.tabletFontSize);
+        },
+
+        updateTabletFontFamily(value) {
+            this.tabletFontFamily = value;
+            this.updateToolProperty('fontFamily', value);
+        },
+
+        toggleTabletFontWeight() {
+            this.tabletFontWeight = this.tabletFontWeight === 'bold' ? 'normal' : 'bold';
+            this.updateToolProperty('fontWeight', this.tabletFontWeight);
+        },
+
+        toggleTabletFontStyle() {
+            this.tabletFontStyle = this.tabletFontStyle === 'italic' ? 'normal' : 'italic';
+            this.updateToolProperty('fontStyle', this.tabletFontStyle);
+        },
+
         syncTabletToolProperties() {
             // Sync tablet UI with current tool properties
             const app = this.getState();
@@ -2707,6 +2756,17 @@ export default {
                     this.tabletShowHardness = true;
                 } else {
                     this.tabletShowHardness = false;
+                }
+
+                // Text tool properties
+                if (tool.constructor.id === 'text') {
+                    this.tabletShowTextProps = true;
+                    this.tabletFontSize = tool.fontSize || 24;
+                    this.tabletFontFamily = tool.fontFamily || 'Arial';
+                    this.tabletFontWeight = tool.fontWeight || 'normal';
+                    this.tabletFontStyle = tool.fontStyle || 'normal';
+                } else {
+                    this.tabletShowTextProps = false;
                 }
             }
 
@@ -2795,14 +2855,13 @@ export default {
             ctx.globalAlpha = 1;
 
             // Calculate viewport rectangle
-            const displayCanvas = this.$refs.mainCanvas;
             const renderer = app.renderer;
 
-            // The viewport in document coordinates
+            // The viewport in document coordinates (use logical display dimensions)
             const viewportLeft = -renderer.panX / renderer.zoom;
             const viewportTop = -renderer.panY / renderer.zoom;
-            const viewportWidth = displayCanvas.width / renderer.zoom;
-            const viewportHeight = displayCanvas.height / renderer.zoom;
+            const viewportWidth = renderer.displayWidth / renderer.zoom;
+            const viewportHeight = renderer.displayHeight / renderer.zoom;
 
             // Convert to navigator coordinates
             const viewX = viewportLeft * scale;
@@ -2874,11 +2933,9 @@ export default {
             const docX = x / scale;
             const docY = y / scale;
 
-            const displayCanvas = this.$refs.mainCanvas;
-            if (!displayCanvas) return;
-
-            const viewWidth = displayCanvas.width / app.renderer.zoom;
-            const viewHeight = displayCanvas.height / app.renderer.zoom;
+            // Use logical display dimensions for viewport calculations
+            const viewWidth = app.renderer.displayWidth / app.renderer.zoom;
+            const viewHeight = app.renderer.displayHeight / app.renderer.zoom;
 
             app.renderer.panX = -(docX - viewWidth / 2) * app.renderer.zoom;
             app.renderer.panY = -(docY - viewHeight / 2) * app.renderer.zoom;
@@ -2905,10 +2962,9 @@ export default {
             let docX = x / scale;
             let docY = y / scale;
 
-            // Get viewport size in document coordinates
-            const displayCanvas = this.$refs.mainCanvas;
-            const viewW = displayCanvas.width / app.renderer.zoom;
-            const viewH = displayCanvas.height / app.renderer.zoom;
+            // Get viewport size in document coordinates (use logical display dimensions)
+            const viewW = app.renderer.displayWidth / app.renderer.zoom;
+            const viewH = app.renderer.displayHeight / app.renderer.zoom;
 
             // Clamp so the viewport edges stay within the document bounds
             // The viewport left edge is at (docX - viewW/2), right edge at (docX + viewW/2)
@@ -2942,8 +2998,8 @@ export default {
             const app = this.getState();
             if (!app?.renderer) return;
             const newZoom = Math.max(0.1, Math.min(8, parseInt(percent) / 100));
-            const canvas = this.$refs.mainCanvas;
-            app.renderer.zoomAt(newZoom / app.renderer.zoom, canvas.width / 2, canvas.height / 2);
+            // Use logical display dimensions for center point
+            app.renderer.zoomAt(newZoom / app.renderer.zoom, app.renderer.displayWidth / 2, app.renderer.displayHeight / 2);
             this.zoom = app.renderer.zoom;
 
             // Update document state so zoom persists
@@ -2966,15 +3022,17 @@ export default {
             const container = this.$refs.canvasContainer;
             if (!canvas || !container) return;
 
-            canvas.width = container.clientWidth || canvas.width;
-            canvas.height = container.clientHeight || canvas.height;
+            // Use resizeDisplay for proper HiDPI support
+            const displayWidth = container.clientWidth || app.renderer.displayWidth;
+            const displayHeight = container.clientHeight || app.renderer.displayHeight;
+            app.renderer.resizeDisplay(displayWidth, displayHeight);
 
             // Calculate zoom to fit document in available space with small padding
             const docWidth = app.renderer.compositeCanvas?.width || this.docWidth;
             const docHeight = app.renderer.compositeCanvas?.height || this.docHeight;
             const padding = 20; // Small padding around the document
-            const availableWidth = canvas.width - padding * 2;
-            const availableHeight = canvas.height - padding * 2;
+            const availableWidth = displayWidth - padding * 2;
+            const availableHeight = displayHeight - padding * 2;
 
             const scaleX = availableWidth / docWidth;
             const scaleY = availableHeight / docHeight;
@@ -2984,8 +3042,8 @@ export default {
             app.renderer.zoom = Math.max(0.01, newZoom); // Minimum zoom to prevent issues
 
             // Center the document
-            app.renderer.panX = (canvas.width - docWidth * app.renderer.zoom) / 2;
-            app.renderer.panY = (canvas.height - docHeight * app.renderer.zoom) / 2;
+            app.renderer.panX = (displayWidth - docWidth * app.renderer.zoom) / 2;
+            app.renderer.panY = (displayHeight - docHeight * app.renderer.zoom) / 2;
 
             // Also update the active document's stored zoom/pan so it doesn't get reset
             const activeDoc = app.documentManager?.getActiveDocument();
@@ -3045,6 +3103,7 @@ export default {
                 opacity: l.opacity,
                 blendMode: l.blendMode,
                 isVector: l.isVector ? l.isVector() : false,
+                isText: l.isText ? l.isText() : false,
             }));
             this.activeLayerId = app.layerStack.getActiveLayer()?.id;
             this.updateLayerControls();
@@ -3893,8 +3952,8 @@ export default {
         zoomIn() {
             const app = this.getState();
             if (!app?.renderer) return;
-            const canvas = this.$refs.mainCanvas;
-            app.renderer.zoomAt(1.25, canvas.width / 2, canvas.height / 2);
+            // Use logical display dimensions for center point
+            app.renderer.zoomAt(1.25, app.renderer.displayWidth / 2, app.renderer.displayHeight / 2);
             this.zoom = app.renderer.zoom;
             this.updateNavigator();
         },
@@ -3902,8 +3961,8 @@ export default {
         zoomOut() {
             const app = this.getState();
             if (!app?.renderer) return;
-            const canvas = this.$refs.mainCanvas;
-            app.renderer.zoomAt(0.8, canvas.width / 2, canvas.height / 2);
+            // Use logical display dimensions for center point
+            app.renderer.zoomAt(0.8, app.renderer.displayWidth / 2, app.renderer.displayHeight / 2);
             this.zoom = app.renderer.zoom;
             this.updateNavigator();
         },
@@ -4120,6 +4179,33 @@ export default {
             this.updateNavigator();
         },
 
+        handleDoubleClick(e) {
+            const app = this.getState();
+            if (!app) return;
+
+            const rect = this.$refs.mainCanvas.getBoundingClientRect();
+            const screenX = e.clientX - rect.left;
+            const screenY = e.clientY - rect.top;
+            const { x, y } = app.renderer.screenToCanvas(screenX, screenY);
+
+            // Check if double-clicking on a text layer
+            const layers = app.layerStack.layers;
+            for (let i = layers.length - 1; i >= 0; i--) {
+                const layer = layers[i];
+                if (layer.isText && layer.isText() && layer.visible && !layer.locked) {
+                    if (layer.containsPoint(x, y)) {
+                        // Switch to text tool and edit this layer
+                        app.toolManager.select('text');
+                        const textTool = app.toolManager.currentTool;
+                        if (textTool && textTool.editTextLayer) {
+                            textTool.editTextLayer(layer);
+                        }
+                        return;
+                    }
+                }
+            }
+        },
+
         handleMouseLeave(e) {
             this.isPanning = false;
             this.mouseOverCanvas = false;
@@ -4257,14 +4343,15 @@ export default {
 
         handleResize() {
             const app = this.getState();
-            if (!app) return;
+            if (!app?.renderer) return;
 
-            const canvas = this.$refs.mainCanvas;
             const container = this.$refs.canvasContainer;
-            if (!canvas || !container) return;
+            if (!container) return;
 
-            canvas.width = container.clientWidth || canvas.width;
-            canvas.height = container.clientHeight || canvas.height;
+            // Use resizeDisplay for proper HiDPI support
+            const displayWidth = container.clientWidth || app.renderer.displayWidth;
+            const displayHeight = container.clientHeight || app.renderer.displayHeight;
+            app.renderer.resizeDisplay(displayWidth, displayHeight);
             app.renderer.centerCanvas();
         },
 

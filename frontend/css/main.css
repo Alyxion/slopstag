@@ -830,6 +830,12 @@ body {
     font-size: 8px;
 }
 
+.layer-type-icon.text {
+    font-weight: bold;
+    font-family: serif;
+    color: #f0a040;
+}
+
 .layer-buttons {
     display: flex;
     padding: 8px;
@@ -2017,4 +2023,31 @@ input[type="checkbox"] {
     flex-direction: column;
     border-top: 1px solid var(--border);
     min-height: 150px;
+}
+
+/* ===== Text Tool Editor ===== */
+.text-tool-editor-container {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+}
+
+.text-tool-editor {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    cursor: text !important;
+}
+
+.text-tool-editor::selection {
+    background: #0078d4;
+    color: white;
+}
+
+.text-tool-editor:empty::before {
+    content: attr(placeholder);
+    color: #999;
+    pointer-events: none;
+}
+
+.text-tool-toolbar {
+    user-select: none;
 }

@@ -1721,3 +1721,57 @@
 [data-mode="tablet"] .tablet-color-cell.small:hover {
     transform: scale(1.15);
 }
+
+/* ==================== Tablet Text Tool Controls ==================== */
+[data-mode="tablet"] .tablet-select {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    font-size: 14px;
+    min-width: 100px;
+    cursor: pointer;
+}
+
+[data-mode="tablet"] .tablet-select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+[data-mode="tablet"] .tablet-toggle-btn {
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    font-weight: bold;
+    font-size: 14px;
+    cursor: pointer;
+    margin-right: 4px;
+    transition: all 0.15s;
+}
+
+[data-mode="tablet"] .tablet-toggle-btn.italic {
+    font-style: italic;
+}
+
+[data-mode="tablet"] .tablet-toggle-btn:hover {
+    background: var(--bg-hover);
+}
+
+[data-mode="tablet"] .tablet-toggle-btn.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+}
+
+/* Text tool input overlay styling */
+.text-tool-input-container {
+    pointer-events: auto;
+}
+
+.text-tool-input {
+    display: block;
+}

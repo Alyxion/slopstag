@@ -13,6 +13,13 @@ export class Renderer {
         this.displayCtx = displayCanvas.getContext('2d');
         this.layerStack = layerStack;
 
+        // Device pixel ratio for HiDPI displays
+        this._dpr = window.devicePixelRatio || 1;
+
+        // Logical display size (CSS pixels)
+        this._displayWidth = displayCanvas.width;
+        this._displayHeight = displayCanvas.height;
+
         // Working canvas for composition
         this.compositeCanvas = document.createElement('canvas');
         this.compositeCtx = this.compositeCanvas.getContext('2d');
@@ -39,6 +46,43 @@ export class Renderer {
         this.animationFrameId = null;
         this.onRenderCallback = null;  // Callback after render completes
         this.startRenderLoop();
+    }
+
+    /**
+     * Get the logical display width (CSS pixels).
+     * @returns {number}
+     */
+    get displayWidth() {
+        return this._displayWidth;
+    }
+
+    /**
+     * Get the logical display height (CSS pixels).
+     * @returns {number}
+     */
+    get displayHeight() {
+        return this._displayHeight;
+    }
+
+    /**
+     * Resize the display canvas for HiDPI support.
+     * @param {number} width - Logical width in CSS pixels
+     * @param {number} height - Logical height in CSS pixels
+     */
+    resizeDisplay(width, height) {
+        const dpr = this._dpr;
+        this._displayWidth = width;
+        this._displayHeight = height;
+
+        // Set the canvas internal size (actual pixels)
+        this.displayCanvas.width = Math.round(width * dpr);
+        this.displayCanvas.height = Math.round(height * dpr);
+
+        // Set the canvas CSS size (logical pixels)
+        this.displayCanvas.style.width = width + 'px';
+        this.displayCanvas.style.height = height + 'px';
+
+        this.needsRender = true;
     }
 
     /**
@@ -73,6 +117,7 @@ export class Renderer {
      */
     render() {
         const { width, height } = this.compositeCanvas;
+        const dpr = this._dpr;
 
         // Clear composite canvas
         this.compositeCtx.clearRect(0, 0, width, height);
@@ -108,21 +153,34 @@ export class Renderer {
         this.compositeCtx.globalAlpha = 1.0;
         this.compositeCtx.globalCompositeOperation = 'source-over';
 
-        // Draw to display canvas with zoom/pan transform
-        this.displayCtx.fillStyle = '#2d2d2d';
-        this.displayCtx.fillRect(0, 0, this.displayCanvas.width, this.displayCanvas.height);
+        // Get logical display size (use stored values or fallback to canvas size / dpr)
+        const displayWidth = this._displayWidth || (this.displayCanvas.width / dpr);
+        const displayHeight = this._displayHeight || (this.displayCanvas.height / dpr);
 
+        // Draw to display canvas with DPR scaling and zoom/pan transform
         this.displayCtx.save();
+
+        // Scale for HiDPI
+        this.displayCtx.scale(dpr, dpr);
+
+        // Fill background at logical size
+        this.displayCtx.fillStyle = '#2d2d2d';
+        this.displayCtx.fillRect(0, 0, displayWidth, displayHeight);
+
+        // Apply zoom/pan transform
         this.displayCtx.translate(this.panX, this.panY);
         this.displayCtx.scale(this.zoom, this.zoom);
 
         // Always enable high-quality image smoothing for best rendering
-        // Use 'high' quality which typically corresponds to bicubic or better interpolation
         this.displayCtx.imageSmoothingEnabled = true;
         this.displayCtx.imageSmoothingQuality = 'high';
 
         this.displayCtx.drawImage(this.compositeCanvas, 0, 0);
         this.displayCtx.restore();
+
+        // Draw overlays with DPR scaling (border, bounding boxes, tool overlays)
+        this.displayCtx.save();
+        this.displayCtx.scale(dpr, dpr);
 
         // Draw canvas border
         this.displayCtx.strokeStyle = '#666666';
@@ -139,6 +197,8 @@ export class Renderer {
 
         // Draw tool overlays (e.g., clone stamp source indicator)
         this.drawToolOverlay();
+
+        this.displayCtx.restore();
     }
 
     /**
@@ -341,8 +401,9 @@ export class Renderer {
      */
     centerCanvas() {
         const { width, height } = this.compositeCanvas;
-        this.panX = (this.displayCanvas.width - width * this.zoom) / 2;
-        this.panY = (this.displayCanvas.height - height * this.zoom) / 2;
+        // Use logical display dimensions for centering
+        this.panX = (this._displayWidth - width * this.zoom) / 2;
+        this.panY = (this._displayHeight - height * this.zoom) / 2;
         this.requestRender();
     }
 
@@ -351,8 +412,9 @@ export class Renderer {
      */
     fitToViewport() {
         const { width, height } = this.compositeCanvas;
-        const scaleX = (this.displayCanvas.width - 40) / width;
-        const scaleY = (this.displayCanvas.height - 40) / height;
+        // Use logical display dimensions for fitting
+        const scaleX = (this._displayWidth - 40) / width;
+        const scaleY = (this._displayHeight - 40) / height;
         this.zoom = Math.min(scaleX, scaleY, 1);
         this.centerCanvas();
     }
