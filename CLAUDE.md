@@ -100,6 +100,23 @@ All editor operations are available via the Session API:
 - `GET /api/sessions/{id}/image` - Get composite image (base64 RGBA)
 - `GET /api/sessions/{id}/layers/{layer_id}` - Get layer image
 
+### Config API
+Get and set UIConfig settings:
+
+- `GET /api/sessions/{id}/config` - Get full config
+- `GET /api/sessions/{id}/config?path=rendering.vectorSupersampleLevel` - Get specific setting
+- `PUT /api/sessions/{id}/config` - Set a config value
+  ```json
+  {"path": "rendering.vectorSupersampleLevel", "value": 3}
+  ```
+
+Available config paths:
+- `rendering.vectorSVGRendering` (bool) - Render via SVG (true) or Canvas 2D (false)
+- `rendering.vectorSupersampleLevel` (int: 1-4) - Supersampling multiplier
+- `rendering.vectorAntialiasing` (bool) - Use geometricPrecision (true) or crispEdges (false)
+- `mode` (str) - UI mode: 'desktop', 'tablet', or 'limited'
+- `desktopMode`, `tabletMode`, `limitedMode` (objects) - Mode-specific settings
+
 ### Tool Execution API
 Execute any tool action programmatically:
 
@@ -227,6 +244,17 @@ const docCoords = layer.canvasToDoc(canvasX, canvasY);
 - Tools must convert to layer coordinates before drawing
 - Operations outside layer bounds are clipped
 - Selections are in document space, not layer space
+
+### VectorLayer Auto-Fit
+
+VectorLayers automatically resize their canvas to fit shape bounds:
+
+- **Shapes stored in document coordinates** (not layer-relative)
+- **Auto-fit on add/remove**: Canvas shrinks to bounding box + padding
+- **Expand during editing**: Canvas grows to document size while dragging
+- **Shrink on edit end**: Canvas shrinks back to fit content
+
+This provides 97%+ memory savings for small shapes on large documents. See `docs/VECTOR_RENDERING.md` for detailed implementation notes and common pitfalls.
 
 ## Cross-Platform Rendering (CRITICAL)
 

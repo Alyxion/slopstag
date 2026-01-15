@@ -13,6 +13,15 @@
 const DEFAULTS = {
     mode: 'desktop',
 
+    // Rendering settings (applies to all modes)
+    rendering: {
+        // Vector layer rendering
+        vectorSVGRendering: true,       // Render vector layers via SVG (true) or Canvas 2D (false)
+        vectorSupersampleLevel: 3,      // Supersampling multiplier (1 = off, 2-4 recommended)
+        vectorAntialiasing: false,      // Use geometricPrecision (true) or crispEdges (false)
+                                        // Note: crispEdges gives exact cross-platform parity
+    },
+
     // Desktop mode settings (full GIMP-like interface)
     desktopMode: {
         showMenuBar: true,

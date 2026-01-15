@@ -47,6 +47,12 @@ export class VectorShapeEditTool extends Tool {
 
     deactivate() {
         super.deactivate();
+        // Clear selection when leaving the select tool
+        const layer = this.getVectorLayer();
+        if (layer && layer.selectedShapeIds.size > 0) {
+            layer.clearSelection();
+            this.app.renderer.requestRender();
+        }
     }
 
     /**
@@ -61,11 +67,9 @@ export class VectorShapeEditTool extends Tool {
     }
 
     refreshSelection() {
-        const layer = this.getVectorLayer();
-        if (layer) {
-            layer.render();
-            this.app.renderer.requestRender();
-        }
+        // Selection handles are now drawn by the Renderer as an overlay,
+        // so we only need to request a renderer update (not a layer re-render)
+        this.app.renderer.requestRender();
     }
 
     onMouseDown(e, x, y) {
@@ -84,6 +88,9 @@ export class VectorShapeEditTool extends Tool {
             this.dragMode = controlHit.control.type === 'handle' ? 'handle' : 'control';
             this.draggedShape = controlHit.shape;
             this.draggedControl = controlHit.control;
+
+            // Start editing mode for fast Canvas 2D preview during drag
+            layer.startEditing();
 
             // Save state for undo
             this.app.history.saveState('Edit Shape');
@@ -112,6 +119,9 @@ export class VectorShapeEditTool extends Tool {
             this.isDragging = true;
             this.dragMode = 'move';
             this.draggedShape = shape;
+
+            // Start editing mode for fast Canvas 2D preview during drag
+            layer.startEditing();
 
             // Save state for undo
             this.app.history.saveState('Move Shape');
@@ -166,6 +176,12 @@ export class VectorShapeEditTool extends Tool {
 
     onMouseUp(e, x, y) {
         if (this.isDragging) {
+            // End editing mode - triggers SVG render
+            const layer = this.getVectorLayer();
+            if (layer) {
+                layer.endEditing();
+            }
+
             this.isDragging = false;
             this.dragMode = null;
             this.draggedShape = null;
@@ -173,16 +189,28 @@ export class VectorShapeEditTool extends Tool {
 
             // Finish undo state
             this.app.history.finishState();
+
+            // Request renderer update for selection handles overlay
+            this.app.renderer.requestRender();
         }
     }
 
     onMouseLeave(e) {
         if (this.isDragging) {
+            // End editing mode - triggers SVG render
+            const layer = this.getVectorLayer();
+            if (layer) {
+                layer.endEditing();
+            }
+
             this.isDragging = false;
             this.dragMode = null;
             this.draggedShape = null;
             this.draggedControl = null;
             this.app.history.finishState();
+
+            // Request renderer update for selection handles overlay
+            this.app.renderer.requestRender();
         }
     }
 

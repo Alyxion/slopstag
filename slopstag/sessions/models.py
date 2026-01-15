@@ -15,6 +15,11 @@ class LayerInfo:
     locked: bool = False
     opacity: float = 1.0
     blend_mode: str = "normal"
+    type: str = "raster"  # 'raster', 'vector', 'text'
+    width: int = 0
+    height: int = 0
+    offset_x: int = 0
+    offset_y: int = 0
 
 
 @dataclass
@@ -78,6 +83,11 @@ class EditorSession:
                     "locked": layer.locked,
                     "opacity": layer.opacity,
                     "blend_mode": layer.blend_mode,
+                    "type": layer.type,
+                    "width": layer.width,
+                    "height": layer.height,
+                    "offset_x": layer.offset_x,
+                    "offset_y": layer.offset_y,
                 }
                 for layer in self.state.layers
             ],

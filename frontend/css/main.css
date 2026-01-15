@@ -1233,6 +1233,71 @@ input[type="checkbox"] {
     line-height: 1.5;
 }
 
+/* Preferences Dialog */
+.preferences-dialog {
+    min-width: 400px;
+    max-width: 500px;
+}
+
+.pref-section {
+    margin-bottom: 16px;
+}
+
+.pref-section h4 {
+    margin: 0 0 12px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.pref-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+}
+
+.pref-row label {
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.pref-row select {
+    width: fit-content;
+    padding: 6px 10px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.pref-row select:hover {
+    border-color: var(--border-hover, var(--border));
+}
+
+.pref-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.pref-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.pref-hint {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-left: 24px;
+}
+
 /* ===== Ribbon Bar ===== */
 .ribbon-bar {
     height: 52px;

@@ -783,3 +783,73 @@ class TestSVGGeneration:
         assert 'width="100"' in svg
         assert 'height="100"' in svg
         assert 'viewBox="0 0 100 100"' in svg
+
+
+
+class TestVectorLayerViaAPI:
+    """Test vector layer functionality via the Session API.
+
+    These tests require the server to be running at localhost:8080.
+    Run with: pytest tests/test_vector_parity.py::TestVectorLayerViaAPI -v
+    """
+
+    @pytest.fixture
+    def api_client(self):
+        """HTTP client for API calls."""
+        import httpx
+        return httpx.Client(base_url="http://localhost:8080/api", timeout=10.0)
+
+    @pytest.fixture
+    def session_id(self, api_client):
+        """Get an active session ID."""
+        try:
+            response = api_client.get("/sessions")
+            sessions = response.json().get("sessions", [])
+            if not sessions:
+                pytest.skip("No active session found. Open the editor in a browser first.")
+            return sessions[0]["id"]
+        except Exception as e:
+            pytest.skip(f"Server not running: {e}")
+
+    def test_session_returns_layers_with_dimensions(self, api_client, session_id):
+        """Session API returns layer dimensions and offsets."""
+        # Create a new document to ensure we have layers
+        response = api_client.post(f"/sessions/{session_id}/command", json={
+            "command": "new_document",
+            "params": {"width": 800, "height": 600}
+        })
+        assert response.status_code == 200
+
+        # Get session state
+        session = api_client.get(f"/sessions/{session_id}").json()
+
+        # Should have at least one layer (Background)
+        assert len(session["layers"]) >= 1, f"Expected layers but got: {session['layers']}"
+
+        # Check first layer has correct structure
+        layer = session["layers"][0]
+        assert layer["width"] == 800
+        assert layer["height"] == 600
+        assert layer["offset_x"] == 0
+        assert layer["offset_y"] == 0
+
+    def test_layer_info_includes_type_and_dimensions(self, api_client, session_id):
+        """Session API returns layer type, width, height, and offsets."""
+        # Create a new document
+        api_client.post(f"/sessions/{session_id}/command", json={
+            "command": "new_document",
+            "params": {"width": 640, "height": 480}
+        })
+
+        session = api_client.get(f"/sessions/{session_id}").json()
+        assert len(session["layers"]) >= 1
+
+        for layer in session["layers"]:
+            assert "type" in layer, "Layer missing 'type' field"
+            assert "width" in layer, "Layer missing 'width' field"
+            assert "height" in layer, "Layer missing 'height' field"
+            assert "offset_x" in layer, "Layer missing 'offset_x' field"
+            assert "offset_y" in layer, "Layer missing 'offset_y' field"
+            assert layer["type"] in ["raster", "vector", "text"]
+            assert layer["width"] > 0
+            assert layer["height"] > 0

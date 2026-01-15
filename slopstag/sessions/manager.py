@@ -92,7 +92,12 @@ class SessionManager:
                     visible=layer.get("visible", True),
                     locked=layer.get("locked", False),
                     opacity=layer.get("opacity", 1.0),
-                    blend_mode=layer.get("blend_mode", "normal"),
+                    blend_mode=layer.get("blendMode", layer.get("blend_mode", "normal")),
+                    type=layer.get("type", "raster"),
+                    width=layer.get("width", 0),
+                    height=layer.get("height", 0),
+                    offset_x=layer.get("offsetX", 0),
+                    offset_y=layer.get("offsetY", 0),
                 )
                 for layer in state_update["layers"]
             ]
@@ -244,6 +249,65 @@ class SessionManager:
                 "importDocument",
                 document_data,
             )
+            return {"success": True, "result": result}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def get_config(
+        self,
+        session_id: str,
+        path: str | None = None,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        """Get UIConfig settings from a session.
+
+        Args:
+            session_id: The session ID
+            path: Optional dot-separated path (e.g., 'rendering.vectorSVGRendering')
+                  If None, returns full config.
+
+        Returns (config_data, metadata) or (None, error_dict).
+        """
+        session = self._sessions.get(session_id)
+        if not session:
+            return None, {"error": "Session not found"}
+
+        if not session.editor:
+            return None, {"error": "Editor not connected"}
+
+        session.update_activity()
+
+        try:
+            result = await session.editor.run_method("getConfig", path)
+            return result, {"success": True}
+        except Exception as e:
+            return None, {"error": str(e)}
+
+    async def set_config(
+        self,
+        session_id: str,
+        path: str,
+        value: Any,
+    ) -> dict[str, Any]:
+        """Set a UIConfig setting on a session.
+
+        Args:
+            session_id: The session ID
+            path: Dot-separated path (e.g., 'rendering.vectorSupersampleLevel')
+            value: The value to set
+
+        Returns success/error dict.
+        """
+        session = self._sessions.get(session_id)
+        if not session:
+            return {"success": False, "error": "Session not found"}
+
+        if not session.editor:
+            return {"success": False, "error": "Editor not connected"}
+
+        session.update_activity()
+
+        try:
+            result = await session.editor.run_method("setConfig", path, value)
             return {"success": True, "result": result}
         except Exception as e:
             return {"success": False, "error": str(e)}

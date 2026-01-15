@@ -30,6 +30,13 @@ class DocumentImportRequest(BaseModel):
     document: dict[str, Any]
 
 
+class ConfigSetRequest(BaseModel):
+    """Request body for setting config value."""
+
+    path: str
+    value: Any
+
+
 @router.get("")
 async def list_sessions() -> dict:
     """List all active editor sessions."""
@@ -190,6 +197,63 @@ async def import_document(
         raise HTTPException(
             status_code=404 if "not found" in result.get("error", "").lower() else 500,
             detail=result.get("error", "Failed to import document"),
+        )
+
+    return result
+
+
+@router.get("/{session_id}/config")
+async def get_config(session_id: str, path: str | None = None) -> dict:
+    """Get UIConfig settings for a session.
+
+    Query params:
+        path: Optional dot-separated config path (e.g., 'rendering.vectorSVGRendering')
+              If not provided, returns the full config.
+
+    Returns:
+        The config value or full config object.
+
+    Example paths:
+        - rendering.vectorSVGRendering (bool)
+        - rendering.vectorSupersampleLevel (int: 1-4)
+        - rendering.vectorAntialiasing (bool)
+        - mode (str: 'desktop', 'tablet', 'limited')
+        - desktopMode, tabletMode, limitedMode (objects)
+    """
+    config, metadata = await session_manager.get_config(session_id, path)
+
+    if config is None:
+        raise HTTPException(
+            status_code=404 if "not found" in metadata.get("error", "").lower() else 500,
+            detail=metadata.get("error", "Failed to get config"),
+        )
+
+    return {"config": config, "path": path}
+
+
+@router.put("/{session_id}/config")
+async def set_config(session_id: str, request: ConfigSetRequest) -> dict:
+    """Set a UIConfig setting for a session.
+
+    Request body:
+        path: Dot-separated config path (e.g., 'rendering.vectorSupersampleLevel')
+        value: The value to set
+
+    Example:
+        {"path": "rendering.vectorSupersampleLevel", "value": 3}
+        {"path": "rendering.vectorAntialiasing", "value": false}
+        {"path": "mode", "value": "tablet"}
+    """
+    result = await session_manager.set_config(
+        session_id,
+        request.path,
+        request.value,
+    )
+
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=404 if "not found" in result.get("error", "").lower() else 500,
+            detail=result.get("error", "Failed to set config"),
         )
 
     return result

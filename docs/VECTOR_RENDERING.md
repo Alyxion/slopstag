@@ -260,6 +260,77 @@ Content-Type: application/json
 ```
 Returns RGBA pixel data rendered via resvg.
 
+## Layer Auto-Fit and Coordinate System
+
+### Coordinate Spaces
+
+Vector shapes are stored in **document coordinates**, not layer-relative coordinates. This is critical to understand:
+
+```
+Document Space (800x600)
+┌────────────────────────────────────────┐
+│                                        │
+│       Shape at (100, 100)              │
+│           ●───────┐                    │
+│           │       │                    │
+│           └───────┘                    │
+│       Layer canvas (auto-fitted)       │
+│       offset: (48, 48)                 │
+│       size: 106x106                    │
+│                                        │
+└────────────────────────────────────────┘
+```
+
+### Auto-Fit Behavior
+
+VectorLayer automatically resizes its canvas to fit the bounding box of its shapes:
+
+1. **On shape add/remove**: `fitToContent()` shrinks canvas to shape bounds
+2. **During editing**: Canvas expands to document size for free movement
+3. **On editing end**: Canvas shrinks back to fit content
+
+```javascript
+// Lifecycle:
+layer.addShape(circle);     // → fitToContent() shrinks to ~106x106
+layer.startEditing();       // → expands to 800x600 for movement
+// ... user drags shape ...
+layer.endEditing();         // → fitToContent() shrinks to new bounds
+```
+
+### Why Auto-Fit?
+
+- **Memory efficiency**: Small shapes don't allocate full document-sized canvas
+- **SVG optimization**: Only render the bounding box area, not full document
+- **Performance**: 97%+ reduction in pixels for small shapes on large documents
+
+### Key Implementation Details
+
+**Selection handles**: Drawn directly at shape's document coordinates (no translation needed since shapes and composite canvas are both in document space).
+
+**Preview rendering**: Translates by `-offsetX, -offsetY` so shapes at document position render correctly within the smaller layer canvas:
+
+```javascript
+renderPreview() {
+    ctx.translate(-this.offsetX, -this.offsetY);
+    for (const shape of this.shapes) {
+        shape.render(ctx);  // shape uses document coords
+    }
+}
+```
+
+**Editing mode expansion**: When `startEditing()` is called, the canvas temporarily expands to document size. This prevents shapes from being clipped when dragged outside current bounds. `endEditing()` shrinks back.
+
+**Immediate preview on edit end**: After `fitToContent()` resizes the canvas (clearing it), an immediate Canvas 2D render is done before the async SVG render. This prevents a blank flash.
+
+### Common Pitfalls
+
+| Problem | Cause | Solution |
+|---------|-------|----------|
+| Selection handles offset | Translating by layer offset when drawing handles | Don't translate - shapes are in document coords |
+| Shape clipped during drag | Canvas still at auto-fit size | Expand canvas in `startEditing()` |
+| Blank layer after drop | Async SVG render not complete | Call `renderPreview()` before async render |
+| Wrong bounds returned | Clamping to layer dimensions | Use `getShapesBoundsInDocSpace()` for true bounds |
+
 ## Known Limitations
 
 1. **Arrow heads**: Lines with arrows require path conversion (more complex SVG)

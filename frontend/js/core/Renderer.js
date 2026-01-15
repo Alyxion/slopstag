@@ -153,6 +153,9 @@ export class Renderer {
         this.compositeCtx.globalAlpha = 1.0;
         this.compositeCtx.globalCompositeOperation = 'source-over';
 
+        // Draw vector layer selection handles as overlay (not stored on layer canvas)
+        this.drawVectorSelectionHandles();
+
         // Get logical display size (use stored values or fallback to canvas size / dpr)
         const displayWidth = this._displayWidth || (this.displayCanvas.width / dpr);
         const displayHeight = this._displayHeight || (this.displayCanvas.height / dpr);
@@ -214,6 +217,22 @@ export class Renderer {
         const docToScreen = (docX, docY) => this.canvasToScreen(docX, docY);
 
         currentTool.drawOverlay(this.displayCtx, docToScreen);
+    }
+
+    /**
+     * Draw selection handles for vector layers.
+     * These are drawn on the composite canvas (not stored on layer canvas)
+     * so they don't appear in the navigator or exports.
+     */
+    drawVectorSelectionHandles() {
+        for (const layer of this.layerStack.layers) {
+            if (!layer.visible) continue;
+            // Check if this is a vector layer with selections
+            // Shapes are in document coordinates, composite context is in document coordinates
+            if (layer.isVector && layer.isVector() && layer.selectedShapeIds?.size > 0) {
+                layer.drawSelectionHandles(this.compositeCtx);
+            }
+        }
     }
 
     /**

@@ -903,6 +903,8 @@ export default {
                     <div class="menu-separator"></div>
                     <div class="menu-item" @click="menuAction('select_all')">Select All (Ctrl+A)</div>
                     <div class="menu-item" @click="menuAction('deselect')">Deselect (Ctrl+D)</div>
+                    <div class="menu-separator"></div>
+                    <div class="menu-item" @click="showPreferencesDialog">Preferences...</div>
                 </template>
                 <template v-else-if="activeMenu === 'view'">
                     <div class="menu-header">Panels</div>
@@ -1068,6 +1070,51 @@ export default {
                         <div class="filter-dialog-buttons">
                             <button class="btn-cancel" @click="cancelRasterize">Cancel</button>
                             <button class="btn-apply" @click="confirmRasterize">Rasterize</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Preferences Dialog -->
+            <div v-if="preferencesDialogVisible" class="filter-dialog-overlay" @click="closePreferencesDialog">
+                <div class="filter-dialog preferences-dialog" @click.stop>
+                    <div class="filter-dialog-header">
+                        <span class="filter-dialog-title">Preferences</span>
+                        <button class="filter-dialog-close" @click="closePreferencesDialog">&times;</button>
+                    </div>
+                    <div class="filter-dialog-body">
+                        <div class="pref-section">
+                            <h4>Vector Rendering</h4>
+                            <div class="pref-row">
+                                <label class="pref-checkbox">
+                                    <input type="checkbox" v-model="prefRenderingSVG">
+                                    Render vector layers via SVG
+                                </label>
+                                <span class="pref-hint">Uses SVG for accurate cross-platform rendering</span>
+                            </div>
+                            <div class="pref-row">
+                                <label>Supersampling Level:</label>
+                                <select v-model.number="prefSupersampleLevel">
+                                    <option :value="1">1x (None)</option>
+                                    <option :value="2">2x</option>
+                                    <option :value="3">3x (Recommended)</option>
+                                    <option :value="4">4x</option>
+                                </select>
+                                <span class="pref-hint">Higher values = smoother edges, slower rendering</span>
+                            </div>
+                            <div class="pref-row">
+                                <label class="pref-checkbox">
+                                    <input type="checkbox" v-model="prefAntialiasing">
+                                    Enable anti-aliasing
+                                </label>
+                                <span class="pref-hint">Smoother edges but may differ between platforms</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="filter-dialog-footer">
+                        <div class="filter-dialog-buttons">
+                            <button class="btn-cancel" @click="closePreferencesDialog">Cancel</button>
+                            <button class="btn-apply" @click="savePreferences">Save</button>
                         </div>
                     </div>
                 </div>
@@ -1404,6 +1451,12 @@ export default {
             rasterizeLayerId: null,
             rasterizeCallback: null,
 
+            // Preferences dialog state
+            preferencesDialogVisible: false,
+            prefRenderingSVG: true,
+            prefSupersampleLevel: 3,
+            prefAntialiasing: false,
+
             // Backend data
             filters: [],
             sampleImages: [],
@@ -1501,6 +1554,7 @@ export default {
                 { DocumentManager },
                 { TextLayer },
                 { VectorLayer },
+                { createShape },
             ] = await Promise.all([
                 import('/static/js/utils/EventBus.js'),
                 import('/static/js/core/LayerStack.js'),
@@ -1543,11 +1597,13 @@ export default {
                 import('/static/js/core/DocumentManager.js'),
                 import('/static/js/core/TextLayer.js'),
                 import('/static/js/core/VectorLayer.js'),
+                import('/static/js/core/VectorShape.js'),
             ]);
 
-            // Expose layer classes to window for testing
+            // Expose layer classes and shape factory to window for testing
             window.TextLayer = TextLayer;
             window.VectorLayer = VectorLayer;
+            window.createVectorShape = createShape;
 
             // Set up canvas
             const canvas = this.$refs.mainCanvas;
@@ -1637,6 +1693,9 @@ export default {
 
             // Store state
             editorState.set(this, app);
+
+            // Expose for testing (accessible via window.__slopstag_app__)
+            window.__slopstag_app__ = app;
 
             // Initialize theme and UI configuration
             themeManager.init();
@@ -3112,6 +3171,13 @@ export default {
                 blendMode: l.blendMode,
                 isVector: l.isVector ? l.isVector() : false,
                 isText: l.isText ? l.isText() : false,
+                // Layer type for API
+                type: l.isVector?.() ? 'vector' : (l.isText?.() ? 'text' : 'raster'),
+                // Layer dimensions and position
+                width: l.width,
+                height: l.height,
+                offsetX: l.offsetX ?? 0,
+                offsetY: l.offsetY ?? 0,
             }));
             this.activeLayerId = app.layerStack.getActiveLayer()?.id;
             this.updateLayerControls();
@@ -3419,6 +3485,48 @@ export default {
             if (callback) {
                 callback(false);
             }
+        },
+
+        // Preferences dialog methods
+        showPreferencesDialog() {
+            this.closeMenu();
+            // Load current values from UIConfig
+            const app = this.getState();
+            if (app?.uiConfig) {
+                this.prefRenderingSVG = app.uiConfig.get('rendering.vectorSVGRendering') ?? true;
+                this.prefSupersampleLevel = app.uiConfig.get('rendering.vectorSupersampleLevel') ?? 3;
+                this.prefAntialiasing = app.uiConfig.get('rendering.vectorAntialiasing') ?? false;
+            }
+            this.preferencesDialogVisible = true;
+        },
+
+        closePreferencesDialog() {
+            this.preferencesDialogVisible = false;
+        },
+
+        savePreferences() {
+            const app = this.getState();
+            if (app?.uiConfig) {
+                app.uiConfig.set('rendering.vectorSVGRendering', this.prefRenderingSVG);
+                app.uiConfig.set('rendering.vectorSupersampleLevel', this.prefSupersampleLevel);
+                app.uiConfig.set('rendering.vectorAntialiasing', this.prefAntialiasing);
+            }
+            this.preferencesDialogVisible = false;
+
+            // Re-render any vector layers with new settings
+            this.reRenderVectorLayers();
+        },
+
+        async reRenderVectorLayers() {
+            const app = this.getState();
+            if (!app?.layerStack) return;
+
+            for (const layer of app.layerStack.layers) {
+                if (layer.type === 'vector' && layer.renderFinal) {
+                    await layer.renderFinal();
+                }
+            }
+            app.renderer?.requestRender();
         },
 
         async applyFilterToLayer(filterId, params, renderAfter = true) {
@@ -4954,6 +5062,37 @@ export default {
                 this.updateLayerList();
 
                 return { success: true, documentId: importedDoc.id };
+            } catch (e) {
+                return { error: e.message };
+            }
+        },
+
+        getConfig(path) {
+            // Get UIConfig value(s) for API access
+            try {
+                if (path) {
+                    // Get specific path
+                    return UIConfig.get(path);
+                } else {
+                    // Return full config (deep clone to avoid mutation)
+                    return JSON.parse(JSON.stringify(UIConfig.config));
+                }
+            } catch (e) {
+                return { error: e.message };
+            }
+        },
+
+        setConfig(path, value) {
+            // Set UIConfig value for API access
+            try {
+                UIConfig.set(path, value);
+
+                // Re-render vector layers if rendering settings changed
+                if (path.startsWith('rendering.')) {
+                    this.reRenderVectorLayers();
+                }
+
+                return { success: true, path, value };
             } catch (e) {
                 return { error: e.message };
             }

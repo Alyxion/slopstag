@@ -49,6 +49,45 @@ GET /api/sessions/{id}
 ```
 Returns session state including layers, dimensions, colors.
 
+**Response:**
+```json
+{
+  "id": "session_abc123",
+  "document": {"width": 800, "height": 600},
+  "layers": [
+    {
+      "id": "layer_1",
+      "name": "Background",
+      "type": "raster",
+      "width": 800,
+      "height": 600,
+      "offset_x": 0,
+      "offset_y": 0,
+      "visible": true,
+      "locked": false,
+      "opacity": 1.0,
+      "blend_mode": "normal"
+    },
+    {
+      "id": "layer_2",
+      "name": "Shape Layer",
+      "type": "vector",
+      "width": 800,
+      "height": 600
+    }
+  ],
+  "active_layer_id": "layer_2",
+  "active_tool": "brush",
+  "colors": {"foreground": "#000000", "background": "#FFFFFF"},
+  "zoom": 1.0
+}
+```
+
+**Layer Types:**
+- `raster` - Bitmap/pixel layer
+- `vector` - Vector shapes layer
+- `text` - Text layer
+
 ### Get Composite Image
 ```
 GET /api/sessions/{id}/image
@@ -203,3 +242,46 @@ HTTP status codes:
 - 400: Bad request (invalid params)
 - 404: Resource not found
 - 500: Server error
+
+## Configuration
+
+### Get Config
+```
+GET /api/sessions/{id}/config?path=rendering.vectorSupersampleLevel
+```
+Get UIConfig settings. Omit `path` query param for full config.
+
+### Set Config
+```
+PUT /api/sessions/{id}/config
+Content-Type: application/json
+
+{
+    "path": "rendering.vectorSupersampleLevel",
+    "value": 4
+}
+```
+
+**Config Paths:**
+- `rendering.vectorSVGRendering` - boolean, use SVG rendering for vectors
+- `rendering.vectorSupersampleLevel` - 1-4, supersampling level
+- `rendering.vectorAntialiasing` - boolean, use anti-aliasing
+- `mode` - 'desktop', 'tablet', or 'limited'
+
+## Document Export/Import
+
+### Export Document
+```
+GET /api/sessions/{id}/document/export
+```
+Export full document as JSON including all layers with their content.
+
+### Import Document
+```
+POST /api/sessions/{id}/document/import
+Content-Type: application/json
+
+{
+    "document": { /* exported document format */ }
+}
+```

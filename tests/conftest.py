@@ -2,6 +2,7 @@
 
 import asyncio
 import multiprocessing
+import os
 import time
 from typing import Generator
 
@@ -14,6 +15,9 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
+
+# Set matplotlib backend before any imports (for NiceGUI testing)
+os.environ.setdefault('MPLBACKEND', 'Agg')
 
 
 def run_server():
@@ -307,3 +311,96 @@ def fresh_editor(fresh_browser):
     helper = EditorTestHelper(fresh_browser)
     helper.wait_for_editor()
     return helper
+
+
+# =============================================================================
+# Playwright-based Screen fixture (NiceGUI Screen API compatible)
+# =============================================================================
+
+class Screen:
+    """Playwright-based screen fixture mimicking NiceGUI's Screen API.
+
+    Provides a similar interface to NiceGUI's Screen fixture but uses
+    Playwright instead of Selenium for better cross-platform support.
+    """
+
+    def __init__(self, page, base_url: str = "http://localhost:8080"):
+        self.page = page
+        self.base_url = base_url
+
+    def open(self, path: str = "/"):
+        """Navigate to a path."""
+        url = f"{self.base_url}{path}" if path.startswith("/") else path
+        self.page.goto(url)
+
+    def should_contain(self, text: str, timeout: float = 5.0):
+        """Assert that the page contains the given text."""
+        self.page.wait_for_selector(f"text={text}", timeout=timeout * 1000)
+
+    def should_not_contain(self, text: str, timeout: float = 0.5):
+        """Assert that the page does not contain the given text."""
+        try:
+            self.page.wait_for_selector(f"text={text}", timeout=timeout * 1000)
+            raise AssertionError(f"Page should not contain '{text}'")
+        except Exception:
+            pass  # Expected - text not found
+
+    def wait(self, seconds: float):
+        """Wait for a number of seconds."""
+        self.page.wait_for_timeout(seconds * 1000)
+
+    def click(self, selector: str):
+        """Click an element by selector."""
+        self.page.click(selector)
+
+    def type(self, selector: str, text: str):
+        """Type text into an element."""
+        self.page.fill(selector, text)
+
+    def find(self, selector: str):
+        """Find an element by selector."""
+        return self.page.query_selector(selector)
+
+    def find_all(self, selector: str):
+        """Find all elements matching selector."""
+        return self.page.query_selector_all(selector)
+
+    def execute_script(self, script: str, *args):
+        """Execute JavaScript in the browser (Selenium-compatible name)."""
+        return self.page.evaluate(script, args if args else None)
+
+    def wait_for_editor(self, timeout: float = 15.0):
+        """Wait for the Slopstag editor to fully load."""
+        self.page.wait_for_selector('.editor-root', timeout=timeout * 1000)
+        self.page.wait_for_function(
+            "() => window.__slopstag_app__?.layerStack?.layers?.length > 0",
+            timeout=timeout * 1000
+        )
+
+
+@pytest.fixture(scope="module")
+def playwright_browser():
+    """Launch Playwright browser for the test module."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        yield browser
+        browser.close()
+
+
+@pytest.fixture
+def screen(playwright_browser):
+    """Create a Screen instance for each test.
+
+    This fixture provides a NiceGUI Screen-like API using Playwright.
+    Usage:
+        def test_something(screen):
+            screen.open('/')
+            screen.wait_for_editor()
+            screen.should_contain('Canvas')
+    """
+    page = playwright_browser.new_page()
+    s = Screen(page)
+    yield s
+    page.close()
