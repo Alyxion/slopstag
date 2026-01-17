@@ -324,6 +324,134 @@ class SessionManager:
         for sid in inactive:
             del self._sessions[sid]
 
+    # Layer Effects Methods
+
+    async def get_layer_effects(
+        self,
+        session_id: str,
+        layer_id: str,
+    ) -> tuple[list[dict[str, Any]] | None, dict[str, Any]]:
+        """Get all effects for a layer.
+
+        Returns (effects_list, metadata) or (None, error_dict).
+        """
+        session = self._sessions.get(session_id)
+        if not session:
+            return None, {"error": "Session not found"}
+
+        if not session.editor:
+            return None, {"error": "Editor not connected"}
+
+        session.update_activity()
+
+        try:
+            result = await session.editor.run_method(
+                "getLayerEffects",
+                layer_id,
+            )
+            if result is not None:
+                return result, {"success": True}
+            return None, {"error": "No effects data returned"}
+        except Exception as e:
+            return None, {"error": str(e)}
+
+    async def add_layer_effect(
+        self,
+        session_id: str,
+        layer_id: str,
+        effect_type: str,
+        params: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Add an effect to a layer.
+
+        Returns success/error dict with effect_id if successful.
+        """
+        session = self._sessions.get(session_id)
+        if not session:
+            return {"success": False, "error": "Session not found"}
+
+        if not session.editor:
+            return {"success": False, "error": "Editor not connected"}
+
+        session.update_activity()
+
+        try:
+            result = await session.editor.run_method(
+                "addLayerEffect",
+                layer_id,
+                effect_type,
+                params,
+            )
+            if result and result.get("success"):
+                return result
+            return {"success": False, "error": result.get("error", "Failed to add effect")}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def update_layer_effect(
+        self,
+        session_id: str,
+        layer_id: str,
+        effect_id: str,
+        params: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Update an effect's parameters.
+
+        Returns success/error dict.
+        """
+        session = self._sessions.get(session_id)
+        if not session:
+            return {"success": False, "error": "Session not found"}
+
+        if not session.editor:
+            return {"success": False, "error": "Editor not connected"}
+
+        session.update_activity()
+
+        try:
+            result = await session.editor.run_method(
+                "updateLayerEffect",
+                layer_id,
+                effect_id,
+                params,
+            )
+            if result and result.get("success"):
+                return result
+            return {"success": False, "error": result.get("error", "Failed to update effect")}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def remove_layer_effect(
+        self,
+        session_id: str,
+        layer_id: str,
+        effect_id: str,
+    ) -> dict[str, Any]:
+        """Remove an effect from a layer.
+
+        Returns success/error dict.
+        """
+        session = self._sessions.get(session_id)
+        if not session:
+            return {"success": False, "error": "Session not found"}
+
+        if not session.editor:
+            return {"success": False, "error": "Editor not connected"}
+
+        session.update_activity()
+
+        try:
+            result = await session.editor.run_method(
+                "removeLayerEffect",
+                layer_id,
+                effect_id,
+            )
+            if result and result.get("success"):
+                return result
+            return {"success": False, "error": result.get("error", "Failed to remove effect")}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
 
 # Global singleton instance
 session_manager = SessionManager()

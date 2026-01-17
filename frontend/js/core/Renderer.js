@@ -2,6 +2,10 @@
  * Renderer - Composites all layers to the display canvas.
  */
 import { BlendModes } from './BlendModes.js';
+import { effectRenderer } from './EffectRenderer.js';
+
+// Expose effectRenderer for debugging/testing
+window.effectRenderer = effectRenderer;
 
 export class Renderer {
     /**
@@ -136,10 +140,25 @@ export class Renderer {
 
             this.compositeCtx.globalAlpha = layer.opacity;
             this.compositeCtx.globalCompositeOperation = BlendModes.toCompositeOperation(layer.blendMode);
-            // Draw layer at its offset position (layers can extend beyond document bounds)
-            const offsetX = layer.offsetX ?? 0;
-            const offsetY = layer.offsetY ?? 0;
-            this.compositeCtx.drawImage(layer.canvas, offsetX, offsetY);
+
+            // Check if layer has effects
+            if (layer.hasEffects && layer.hasEffects()) {
+                // Get rendered layer with effects applied
+                const rendered = effectRenderer.getRenderedLayer(layer);
+                if (rendered) {
+                    this.compositeCtx.drawImage(rendered.canvas, rendered.offsetX, rendered.offsetY);
+                } else {
+                    // Fallback to original if rendering failed
+                    const offsetX = layer.offsetX ?? 0;
+                    const offsetY = layer.offsetY ?? 0;
+                    this.compositeCtx.drawImage(layer.canvas, offsetX, offsetY);
+                }
+            } else {
+                // Draw layer at its offset position (layers can extend beyond document bounds)
+                const offsetX = layer.offsetX ?? 0;
+                const offsetY = layer.offsetY ?? 0;
+                this.compositeCtx.drawImage(layer.canvas, offsetX, offsetY);
+            }
         }
 
         // Draw preview layer if set

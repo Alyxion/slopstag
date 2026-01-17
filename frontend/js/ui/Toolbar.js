@@ -19,7 +19,6 @@ export class Toolbar {
                     <button class="toolbar-menu-btn" data-menu="file">File</button>
                     <button class="toolbar-menu-btn" data-menu="edit">Edit</button>
                     <button class="toolbar-menu-btn" data-menu="filter">Filter</button>
-                    <button class="toolbar-menu-btn" data-menu="image">Image</button>
                 </div>
             </div>
             <div class="toolbar-center">

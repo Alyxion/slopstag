@@ -3,8 +3,41 @@
 ## Quick Start
 ```bash
 poetry install
-python main.py
+poetry run python main.py
 # Opens http://localhost:8080 with hot reload
+```
+
+## Related Packages
+
+This project works alongside **ImageStag** (`/projects/ImageStag`) - a fast image processing library. Both packages are developed together:
+
+- **Slopstag**: Web-based image editor (this repo)
+- **ImageStag**: Image processing library with Rust extensions (dev dependency)
+
+When modifying ImageStag, changes are immediately available in Slopstag (installed as editable).
+
+## Development Commands
+
+**IMPORTANT: All Python commands MUST use `poetry run`** - never call `.venv/bin/python` directly.
+
+```bash
+# Run the server
+poetry run python main.py
+
+# Run tests
+poetry run pytest tests/
+
+# Run a specific test
+poetry run pytest tests/test_vector_layer_bounds.py -v
+```
+
+### Poetry "Broken Virtualenv" Bug
+
+If you see `The virtual environment found in . seems to be broken`, this is a [known Poetry bug](https://github.com/python-poetry/poetry/issues/10610) caused by the `VIRTUAL_ENV` environment variable. Fix it by unsetting the variable:
+
+```bash
+unset VIRTUAL_ENV
+poetry install
 ```
 
 ## Architecture

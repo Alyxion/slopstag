@@ -1,3 +1,5 @@
+import { LayerEffect, effectRegistry } from './LayerEffects.js';
+
 /**
  * Layer - Represents a single layer with its own offscreen canvas.
  *
@@ -5,6 +7,7 @@
  * - Its own canvas that can be larger than the document
  * - An offset (x, y) from the document origin
  * - Methods to expand when content is drawn outside bounds
+ * - Optional layer effects (drop shadow, stroke, glow, etc.)
  */
 export class Layer {
     /**
@@ -41,6 +44,124 @@ export class Layer {
         this.blendMode = options.blendMode || 'normal';
         this.visible = options.visible ?? true;
         this.locked = options.locked ?? false;
+
+        // Layer effects (non-destructive)
+        this.effects = options.effects || [];
+
+        // Effect cache invalidation counter
+        this._effectCacheVersion = 0;
+    }
+
+    /**
+     * Add an effect to this layer.
+     * @param {LayerEffect} effect - Effect to add
+     * @param {number} [index] - Position to insert at (default: end)
+     */
+    addEffect(effect, index = -1) {
+        if (index < 0 || index >= this.effects.length) {
+            this.effects.push(effect);
+        } else {
+            this.effects.splice(index, 0, effect);
+        }
+        this._effectCacheVersion++;
+    }
+
+    /**
+     * Remove an effect by ID.
+     * @param {string} effectId
+     * @returns {boolean} True if effect was found and removed
+     */
+    removeEffect(effectId) {
+        const index = this.effects.findIndex(e => e.id === effectId);
+        if (index >= 0) {
+            this.effects.splice(index, 1);
+            this._effectCacheVersion++;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Get an effect by ID.
+     * @param {string} effectId
+     * @returns {LayerEffect|null}
+     */
+    getEffect(effectId) {
+        return this.effects.find(e => e.id === effectId) || null;
+    }
+
+    /**
+     * Update effect parameters.
+     * @param {string} effectId
+     * @param {Object} params - Parameters to update
+     * @returns {boolean} True if effect was found and updated
+     */
+    updateEffect(effectId, params) {
+        const effect = this.getEffect(effectId);
+        if (!effect) return false;
+
+        Object.assign(effect, params);
+        this._effectCacheVersion++;
+        return true;
+    }
+
+    /**
+     * Move an effect to a new position in the stack.
+     * @param {string} effectId
+     * @param {number} newIndex
+     */
+    moveEffect(effectId, newIndex) {
+        const index = this.effects.findIndex(e => e.id === effectId);
+        if (index < 0) return;
+
+        const [effect] = this.effects.splice(index, 1);
+        this.effects.splice(Math.max(0, Math.min(newIndex, this.effects.length)), 0, effect);
+        this._effectCacheVersion++;
+    }
+
+    /**
+     * Check if layer has any enabled effects.
+     * @returns {boolean}
+     */
+    hasEffects() {
+        return this.effects.some(e => e.enabled);
+    }
+
+    /**
+     * Get the visual bounds including effect expansion.
+     * @returns {{x: number, y: number, width: number, height: number}}
+     */
+    getVisualBounds() {
+        const base = this.getBounds();
+
+        if (!this.hasEffects()) {
+            return base;
+        }
+
+        // Calculate total expansion from all effects
+        let left = 0, top = 0, right = 0, bottom = 0;
+        for (const effect of this.effects) {
+            if (!effect.enabled) continue;
+            const exp = effect.getExpansion();
+            left = Math.max(left, exp.left);
+            top = Math.max(top, exp.top);
+            right = Math.max(right, exp.right);
+            bottom = Math.max(bottom, exp.bottom);
+        }
+
+        return {
+            x: base.x - left,
+            y: base.y - top,
+            width: base.width + left + right,
+            height: base.height + top + bottom
+        };
+    }
+
+    /**
+     * Invalidate effect cache (call after modifying layer content).
+     */
+    invalidateEffectCache() {
+        this._effectCacheVersion++;
     }
 
     /**
@@ -210,7 +331,8 @@ export class Layer {
             name: `${this.name} (copy)`,
             opacity: this.opacity,
             blendMode: this.blendMode,
-            visible: this.visible
+            visible: this.visible,
+            effects: this.effects.map(e => e.clone())
         });
         cloned.ctx.drawImage(this.canvas, 0, 0);
         return cloned;
@@ -287,7 +409,8 @@ export class Layer {
             blendMode: this.blendMode,
             visible: this.visible,
             locked: this.locked,
-            imageData: this.canvas.toDataURL('image/png')
+            imageData: this.canvas.toDataURL('image/png'),
+            effects: this.effects.map(e => e.serialize())
         };
     }
 
@@ -297,6 +420,11 @@ export class Layer {
      * @returns {Promise<Layer>}
      */
     static async deserialize(data) {
+        // Deserialize effects
+        const effects = (data.effects || [])
+            .map(e => LayerEffect.deserialize(e))
+            .filter(e => e !== null);
+
         const layer = new Layer({
             id: data.id,
             name: data.name,
@@ -307,7 +435,8 @@ export class Layer {
             opacity: data.opacity,
             blendMode: data.blendMode,
             visible: data.visible,
-            locked: data.locked
+            locked: data.locked,
+            effects: effects
         });
 
         // Load image data from data URL

@@ -37,6 +37,19 @@ class ConfigSetRequest(BaseModel):
     value: Any
 
 
+class EffectAddRequest(BaseModel):
+    """Request body for adding a layer effect."""
+
+    effect_type: str
+    params: dict[str, Any] = {}
+
+
+class EffectUpdateRequest(BaseModel):
+    """Request body for updating a layer effect."""
+
+    params: dict[str, Any]
+
+
 @router.get("")
 async def list_sessions() -> dict:
     """List all active editor sessions."""
@@ -254,6 +267,114 @@ async def set_config(session_id: str, request: ConfigSetRequest) -> dict:
         raise HTTPException(
             status_code=404 if "not found" in result.get("error", "").lower() else 500,
             detail=result.get("error", "Failed to set config"),
+        )
+
+    return result
+
+
+# Layer Effects API
+
+
+@router.get("/{session_id}/layers/{layer_id}/effects")
+async def list_layer_effects(session_id: str, layer_id: str) -> dict:
+    """List all effects on a layer.
+
+    Returns:
+        List of effect objects with type, id, enabled, and parameters.
+    """
+    effects, metadata = await session_manager.get_layer_effects(session_id, layer_id)
+
+    if effects is None:
+        raise HTTPException(
+            status_code=404 if "not found" in metadata.get("error", "").lower() else 500,
+            detail=metadata.get("error", "Failed to get effects"),
+        )
+
+    return {"effects": effects, "layer_id": layer_id}
+
+
+@router.post("/{session_id}/layers/{layer_id}/effects")
+async def add_layer_effect(
+    session_id: str,
+    layer_id: str,
+    request: EffectAddRequest,
+) -> dict:
+    """Add an effect to a layer.
+
+    Available effect types:
+    - dropShadow: Drop shadow (offsetX, offsetY, blur, spread, color, colorOpacity)
+    - innerShadow: Inner shadow (offsetX, offsetY, blur, choke, color, colorOpacity)
+    - outerGlow: Outer glow (blur, spread, color, colorOpacity)
+    - innerGlow: Inner glow (blur, choke, color, colorOpacity, source)
+    - bevelEmboss: Bevel & Emboss (style, depth, direction, size, soften, angle, altitude, etc.)
+    - stroke: Stroke (size, position, color, colorOpacity)
+    - colorOverlay: Color overlay (color)
+
+    All effects also accept: enabled (bool), blendMode (str), opacity (float)
+    """
+    result = await session_manager.add_layer_effect(
+        session_id,
+        layer_id,
+        request.effect_type,
+        request.params,
+    )
+
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=404 if "not found" in result.get("error", "").lower() else 500,
+            detail=result.get("error", "Failed to add effect"),
+        )
+
+    return result
+
+
+@router.put("/{session_id}/layers/{layer_id}/effects/{effect_id}")
+async def update_layer_effect(
+    session_id: str,
+    layer_id: str,
+    effect_id: str,
+    request: EffectUpdateRequest,
+) -> dict:
+    """Update an effect's parameters.
+
+    Params can include any effect-specific parameters plus:
+    - enabled: bool
+    - blendMode: str
+    - opacity: float
+    """
+    result = await session_manager.update_layer_effect(
+        session_id,
+        layer_id,
+        effect_id,
+        request.params,
+    )
+
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=404 if "not found" in result.get("error", "").lower() else 500,
+            detail=result.get("error", "Failed to update effect"),
+        )
+
+    return result
+
+
+@router.delete("/{session_id}/layers/{layer_id}/effects/{effect_id}")
+async def remove_layer_effect(
+    session_id: str,
+    layer_id: str,
+    effect_id: str,
+) -> dict:
+    """Remove an effect from a layer."""
+    result = await session_manager.remove_layer_effect(
+        session_id,
+        layer_id,
+        effect_id,
+    )
+
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=404 if "not found" in result.get("error", "").lower() else 500,
+            detail=result.get("error", "Failed to remove effect"),
         )
 
     return result

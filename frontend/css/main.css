@@ -2116,3 +2116,270 @@ input[type="checkbox"] {
 .text-tool-toolbar {
     user-select: none;
 }
+
+/* ===== Context Menu ===== */
+.context-menu {
+    position: fixed;
+    background-color: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    box-shadow: var(--shadow-dropdown);
+    min-width: 160px;
+    z-index: 2000;
+    padding: 4px 0;
+}
+
+/* ===== Layer Effects Panel ===== */
+.effects-panel {
+    position: fixed;
+    width: 520px;
+    height: 420px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: var(--shadow-floating);
+    z-index: 1500;
+    display: flex;
+    flex-direction: column;
+}
+
+.effects-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    background: var(--bg-dark);
+    border-bottom: 1px solid var(--border);
+    border-radius: 8px 8px 0 0;
+    cursor: move;
+    user-select: none;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.effects-panel-close {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+.effects-panel-close:hover {
+    color: var(--text-primary);
+}
+
+.effects-panel-body {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+.effects-list-pane {
+    width: 180px;
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    flex-shrink: 0;
+}
+
+.effects-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.effect-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+}
+
+.effect-row:hover {
+    background: var(--bg-hover);
+}
+
+.effect-row.selected {
+    background: var(--bg-active);
+}
+
+.effect-row.enabled {
+    color: var(--text-primary);
+}
+
+.effect-row.enabled .effect-label {
+    font-weight: 500;
+}
+
+.effect-checkbox {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.effect-label {
+    font-size: 12px;
+    flex: 1;
+}
+
+.effects-props-pane {
+    flex: 1;
+    padding: 12px;
+    overflow-y: auto;
+}
+
+.effects-props-empty {
+    color: var(--text-secondary);
+    font-size: 12px;
+    text-align: center;
+    padding: 40px 20px;
+    font-style: italic;
+}
+
+.effects-props-title {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+.effects-props-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.effects-panel-footer {
+    display: flex;
+    justify-content: flex-end;
+    padding: 10px 14px;
+    border-top: 1px solid var(--border);
+    gap: 8px;
+}
+
+.effects-panel-footer .btn-ok {
+    padding: 6px 20px;
+    background: var(--accent);
+    border: none;
+    border-radius: 4px;
+    color: white;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.effects-panel-footer .btn-ok:hover {
+    background: var(--accent-hover);
+}
+
+/* ===== Effect Editor ===== */
+.effect-editor {
+    position: fixed;
+    width: 280px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: var(--shadow-floating);
+    z-index: 1600;
+    display: flex;
+    flex-direction: column;
+}
+
+.effect-editor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--bg-dark);
+    border-bottom: 1px solid var(--border);
+    border-radius: 8px 8px 0 0;
+    cursor: move;
+    user-select: none;
+    font-weight: 600;
+    font-size: 12px;
+}
+
+.effect-editor-close {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+.effect-editor-close:hover {
+    color: var(--text-primary);
+}
+
+.effect-editor-content {
+    padding: 12px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.effect-param-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    font-size: 11px;
+}
+
+.effect-param-row > span:first-child {
+    min-width: 80px;
+    color: var(--text-secondary);
+}
+
+.effect-param-row input[type="range"] {
+    flex: 1;
+    min-width: 80px;
+}
+
+.effect-param-row input[type="color"] {
+    width: 32px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.effect-param-row input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+}
+
+.effect-param-row select {
+    flex: 1;
+    padding: 4px 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-primary);
+    font-size: 11px;
+}
+
+.effect-param-row input[type="text"] {
+    flex: 1;
+    padding: 4px 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-primary);
+    font-size: 11px;
+}
+
+.effect-param-value {
+    min-width: 35px;
+    text-align: right;
+    color: var(--text-secondary);
+    font-size: 10px;
+}

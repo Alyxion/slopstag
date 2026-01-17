@@ -7,6 +7,7 @@ import { Renderer } from './core/Renderer.js';
 import { History } from './core/History.js';
 import { ToolManager } from './tools/ToolManager.js';
 import { PluginManager } from './plugins/PluginManager.js';
+import * as LayerEffects from './core/LayerEffects.js';
 
 // Tools
 import { BrushTool } from './tools/BrushTool.js';
@@ -314,6 +315,7 @@ function waitForElement(selector, timeout = 10000) {
 waitForElement('#main-canvas').then(() => {
     console.log('Canvas element found, initializing Slopstag...');
     window.app = new EditorApp();
+    window.LayerEffects = LayerEffects;  // Export for testing and plugins
 }).catch(err => {
     console.error('Failed to initialize:', err);
 });
